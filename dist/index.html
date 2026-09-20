@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#101725" />
+    <meta
+      name="description"
+      content="Нить — короткие ежедневные тренировки связной и уверенной речи."
+    />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23101725'/%3E%3Cpath d='M15 42c9-22 25-22 34 0M18 24c8 7 20 7 28 0' fill='none' stroke='%235de1c4' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E"
+    />
+    <title>Нить — тренажёр речи</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="#" aria-label="Нить — на главную">
+          <span class="brand-mark" aria-hidden="true"><span></span></span>
+          <span>Нить</span>
+        </a>
+        <button class="icon-button" id="soundToggle" type="button" aria-label="Выключить звуки">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M5 9v6h4l5 4V5L9 9H5Zm12.5.4a4 4 0 0 1 0 5.2M19.8 7a7 7 0 0 1 0 10" />
+          </svg>
+        </button>
+      </header>
+
+      <main id="app" tabindex="-1"></main>
+
+      <footer class="privacy-note">
+        <span aria-hidden="true">●</span>
+        Записи хранятся только на этом устройстве
+      </footer>
+    </div>
+
+    <template id="homeTemplate">
+      <section class="home-view" aria-labelledby="homeTitle">
+        <div class="eyebrow">Неделя 1 · Стартовая тренировка</div>
+        <div class="thread-visual" aria-hidden="true">
+          <span class="thread-dot"></span>
+          <span class="thread-line"></span>
+          <span class="thread-loop"></span>
+        </div>
+        <h1 id="homeTitle">Не потеряй мысль</h1>
+        <p class="lead">
+          Научимся удерживать направление ответа, находить точные слова и уверенно завершать мысль.
+        </p>
+
+        <div class="session-facts" aria-label="Параметры тренировки">
+          <div><strong>8–12</strong><span>минут</span></div>
+          <div><strong>4</strong><span>упражнения</span></div>
+          <div><strong>3</strong><span>записи</span></div>
+        </div>
+
+        <button class="primary-button" id="startSession" type="button">
+          <span>Начать тренировку</span>
+          <span aria-hidden="true">→</span>
+        </button>
+        <p class="resume-note" id="resumeNote" hidden></p>
+      </section>
+    </template>
+
+    <template id="sessionTemplate">
+      <section class="session-view" aria-live="polite">
+        <div class="session-head">
+          <button class="back-button" id="backHome" type="button" aria-label="Вернуться на главную">←</button>
+          <div class="progress-copy">
+            <span id="stepLabel">Этап 1 из 5</span>
+            <strong id="stepName">Контрольная запись</strong>
+          </div>
+          <button class="text-button" id="skipStep" type="button">Пропустить</button>
+        </div>
+        <div class="progress-track" aria-hidden="true"><span id="progressBar"></span></div>
+
+        <article class="exercise-card" id="exerciseCard"></article>
+      </section>
+    </template>
+
+    <template id="ratingTemplate">
+      <div class="rating-row" role="group">
+        <button type="button" data-rating="1">1</button>
+        <button type="button" data-rating="2">2</button>
+        <button type="button" data-rating="3">3</button>
+        <button type="button" data-rating="4">4</button>
+        <button type="button" data-rating="5">5</button>
+      </div>
+    </template>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>
+
