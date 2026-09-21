@@ -151,6 +151,9 @@ let countdownResolve = null;
 let currentPhase = 'idle';
 let secondsLeft = 0;
 let audioContext = null;
+let playbackUrl = null;
+let playbackTimer = null;
+let playbackAudio = null;
 let soundsEnabled = true;
 
 function freshState() {
@@ -252,6 +255,7 @@ function renderEntry() {
 function renderOnboarding() {
   stopTimer();
   stopStream();
+  clearPlayback();
   app.replaceChildren(onboardingTemplate.content.cloneNode(true));
   const save = document.querySelector('#saveGoal');
   const warning = document.querySelector('#changeWarning');
@@ -294,6 +298,7 @@ function renderWeek() {
   }
   stopTimer();
   stopStream();
+  clearPlayback();
   app.replaceChildren(weekTemplate.content.cloneNode(true));
 
   const completedDays = days.filter((day) => state.sessions[String(day.id)]?.completedAt).length;
@@ -337,6 +342,7 @@ function renderHome() {
   }
   stopTimer();
   stopStream();
+  clearPlayback();
   app.replaceChildren(homeTemplate.content.cloneNode(true));
   const day = currentDay();
   const session = sessionFor();
@@ -383,6 +389,7 @@ function renderHome() {
 
 function renderSession() {
   stopTimer();
+  clearPlayback();
   app.replaceChildren(sessionTemplate.content.cloneNode(true));
 
   const day = currentDay();
@@ -414,6 +421,7 @@ function exerciseHeader(step) {
     <h2>${step.title}</h2>
     <p>${step.description}</p>
     ${step.prompt ? `<div class="prompt-box${step.reading ? ' reading-text' : ''}">${step.reading ? step.prompt.split('\n\n').map((paragraph) => `<p>${paragraph}</p>`).join('') : step.prompt}</div>` : ''}
+    ${step.helpText ? `<div class="learning-card"><strong>${step.helpTitle || 'Как выполнить'}</strong><span>${step.helpText}</span></div>` : ''}
     ${step.anchors ? `<div class="anchors">${step.anchors.map((item) => `<span>${item}</span>`).join('')}</div>` : ''}
     ${step.rescue ? `<p class="status-message">${step.rescue}</p>` : ''}
   `;
@@ -525,7 +533,9 @@ async function finishRecording() {
   const step = resolveStep(day.steps[session.stepIndex]);
   const action = document.querySelector('#recordAction');
   const status = document.querySelector('#recordStatus');
+  const card = document.querySelector('#exerciseCard');
   action.disabled = true;
+  let savedBlob = null;
 
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
     await new Promise((resolve) => {
@@ -537,7 +547,8 @@ async function finishRecording() {
     try {
       await saveRecording(recordId, blob, { dayId: day.id, stepId: step.id, createdAt: new Date().toISOString() });
       session.recordings.push({ id: recordId, stepId: step.id, seconds: step.duration });
-      status.textContent = 'Запись сохранена на этом устройстве.';
+      savedBlob = blob;
+      status.textContent = 'Запись сохранена только в этом браузере. Слушать её необязательно.';
     } catch {
       status.textContent = 'Запись завершена, но сохранить её не удалось.';
     }
@@ -550,9 +561,47 @@ async function finishRecording() {
   action.remove();
   const buttons = document.createElement('div');
   buttons.className = 'button-stack';
-  buttons.innerHTML = `<button class="primary-button" type="button"><span>Продолжить</span><span aria-hidden="true">→</span></button>`;
+  buttons.innerHTML = `
+    ${savedBlob ? '<button class="secondary-button" id="previewRecording" type="button">Прослушать первые 10 секунд · необязательно</button>' : ''}
+    <button class="secondary-button" id="repeatRecording" type="button">Записать ещё раз</button>
+    <button class="primary-button" id="continueAfterRecording" type="button"><span>Продолжить без прослушивания</span><span aria-hidden="true">→</span></button>
+  `;
   document.querySelector('.timer-zone').append(buttons);
-  buttons.querySelector('button').addEventListener('click', nextStep);
+  document.querySelector('#continueAfterRecording').addEventListener('click', nextStep);
+  document.querySelector('#repeatRecording').addEventListener('click', () => {
+    clearPlayback();
+    currentPhase = 'idle';
+    renderRecording(card, step);
+  });
+
+  if (savedBlob) {
+    clearPlayback();
+    playbackUrl = URL.createObjectURL(savedBlob);
+    const preview = document.querySelector('#previewRecording');
+    playbackAudio = new Audio(playbackUrl);
+    preview.addEventListener('click', async () => {
+      if (!playbackAudio.paused) {
+        playbackAudio.pause();
+        clearTimeout(playbackTimer);
+        preview.textContent = 'Прослушать первые 10 секунд · необязательно';
+        status.textContent = 'Прослушивание остановлено. Можно сразу продолжить.';
+        return;
+      }
+      playbackAudio.currentTime = 0;
+      try {
+        await playbackAudio.play();
+        preview.textContent = 'Остановить прослушивание';
+        status.textContent = 'Звучат первые 10 секунд. Остановить можно в любой момент.';
+        playbackTimer = setTimeout(() => {
+          playbackAudio.pause();
+          preview.textContent = 'Прослушать первые 10 секунд ещё раз';
+          status.textContent = 'Готово. Не оценивай голос — проверь только, понятна ли мысль.';
+        }, 10000);
+      } catch {
+        status.textContent = 'Не удалось включить запись. Можно продолжить без прослушивания.';
+      }
+    });
+  }
 }
 
 function renderSprint(card, step) {
@@ -700,6 +749,15 @@ function stopStream() {
   if (mediaStream) mediaStream.getTracks().forEach((track) => track.stop());
   mediaStream = null;
   mediaRecorder = null;
+}
+
+function clearPlayback() {
+  if (playbackTimer) clearTimeout(playbackTimer);
+  playbackTimer = null;
+  if (playbackAudio) playbackAudio.pause();
+  playbackAudio = null;
+  if (playbackUrl) URL.revokeObjectURL(playbackUrl);
+  playbackUrl = null;
 }
 
 function beep(frequency, duration) {

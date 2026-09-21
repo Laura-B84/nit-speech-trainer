@@ -293,6 +293,17 @@ h1 {
 .reading-text { max-height: 310px; overflow-y: auto; font-size: 1.04rem; line-height: 1.68; padding-right: 18px; }
 .reading-text p { margin: 0 0 1em; }
 .reading-text p:last-child { margin-bottom: 0; }
+.learning-card {
+  margin: -6px 0 18px;
+  padding: 15px 17px;
+  display: grid;
+  gap: 5px;
+  border: 1px solid rgba(255, 180, 95, 0.28);
+  border-radius: 16px;
+  background: rgba(255, 180, 95, 0.075);
+}
+.learning-card strong { color: var(--warm); font-size: 0.88rem; }
+.learning-card span { color: #d8e0eb; font-size: 0.91rem; line-height: 1.45; }
 .anchors { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 22px; }
 .anchors span { padding: 8px 11px; border-radius: 999px; background: #202e43; color: #dce5f2; font-size: 0.86rem; }
 .timer-zone { margin-top: auto; display: grid; place-items: center; gap: 18px; padding-top: 18px; }
