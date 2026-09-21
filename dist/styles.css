@@ -93,6 +93,7 @@ main { flex: 1; display: flex; }
 main:focus { outline: none; }
 
 .home-view,
+.week-view,
 .session-view,
 .onboarding-view { width: 100%; }
 
@@ -138,6 +139,60 @@ main:focus { outline: none; }
   font-size: 0.84rem;
   cursor: pointer;
 }
+
+.week-view { padding: 4vh 0 3vh; }
+.week-header { display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: end; }
+.week-header h1 { font-size: clamp(3.2rem, 10vw, 5.8rem); }
+.week-header .lead { margin-bottom: 10px; }
+.week-progress {
+  min-width: 116px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgba(18, 27, 42, 0.76);
+  text-align: center;
+}
+.week-progress strong { display: block; color: var(--accent); font-size: 1.7rem; }
+.week-progress span { color: var(--muted); font-size: 0.75rem; }
+.week-view .goal-chip { margin: 16px 0 22px; }
+.day-list { display: grid; gap: 10px; }
+.day-card {
+  width: 100%;
+  min-height: 82px;
+  display: grid;
+  grid-template-columns: 38px 36px minmax(0, 1fr) auto;
+  gap: 13px;
+  align-items: center;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 19px;
+  background: rgba(18, 27, 42, 0.76);
+  text-align: left;
+  cursor: pointer;
+}
+.day-card:hover { border-color: rgba(93, 225, 196, 0.55); background: rgba(25, 38, 57, 0.9); }
+.day-card.active { border-color: var(--warm); }
+.day-card.complete { border-color: rgba(93, 225, 196, 0.42); }
+.day-number {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #223047;
+  color: var(--muted);
+  font-weight: 800;
+}
+.day-card.complete .day-number { background: var(--accent); color: #071310; }
+.day-icon { font-size: 1.35rem; text-align: center; }
+.day-copy { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.day-copy strong { font-size: 1.02rem; }
+.day-copy small { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.day-status { color: var(--muted); font-size: 0.82rem; }
+.day-card.active .day-status { color: var(--warm); }
+.day-card.complete .day-status { color: var(--accent); }
+.week-back { margin: 0 0 18px; padding: 5px 0; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.week-back:hover { color: var(--text); }
 
 .eyebrow {
   color: var(--accent);
@@ -289,6 +344,10 @@ h1 {
   .text-button { font-size: 0.85rem; }
   .goal-list { grid-template-columns: 1fr; }
   .goal-option:last-child { grid-column: auto; }
+  .week-header { grid-template-columns: 1fr; }
+  .week-progress { justify-self: stretch; display: flex; align-items: baseline; justify-content: center; gap: 8px; }
+  .day-card { grid-template-columns: 34px 30px minmax(0, 1fr); padding-inline: 13px; }
+  .day-status { grid-column: 3; }
 }
 
 @media (prefers-reduced-motion: reduce) {

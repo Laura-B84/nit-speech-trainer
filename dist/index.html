@@ -76,24 +76,43 @@
       </section>
     </template>
 
+    <template id="weekTemplate">
+      <section class="week-view" aria-labelledby="weekTitle">
+        <div class="week-header">
+          <div>
+            <div class="eyebrow">Твоя программа</div>
+            <h1 id="weekTitle">Неделя 1</h1>
+            <p class="lead">Короткая тренировка каждый день: читаем вслух и сразу переносим навык в свободную речь.</p>
+          </div>
+          <div class="week-progress" aria-label="Прогресс недели">
+            <strong id="weekProgressValue">0/7</strong>
+            <span>дней готово</span>
+          </div>
+        </div>
+        <button class="goal-chip" id="weekChangeGoal" type="button"></button>
+        <div class="day-list" id="dayList"></div>
+      </section>
+    </template>
+
     <template id="homeTemplate">
       <section class="home-view" aria-labelledby="homeTitle">
-        <div class="eyebrow">Неделя 1 · Стартовая тренировка</div>
+        <button class="week-back" id="backWeek" type="button">← Неделя 1</button>
+        <div class="eyebrow" id="dayEyebrow">День 1 · Стартовая тренировка</div>
         <div class="thread-visual" aria-hidden="true">
           <span class="thread-dot"></span>
           <span class="thread-line"></span>
           <span class="thread-loop"></span>
         </div>
         <h1 id="homeTitle">Не потеряй мысль</h1>
-        <p class="lead">
+        <p class="lead" id="dayLead">
           Научимся удерживать направление ответа, находить точные слова и уверенно завершать мысль.
         </p>
         <button class="goal-chip" id="changeGoal" type="button"></button>
 
         <div class="session-facts" aria-label="Параметры тренировки">
-          <div><strong>8–12</strong><span>минут</span></div>
-          <div><strong>5</strong><span>упражнений</span></div>
-          <div><strong>4</strong><span>записи</span></div>
+          <div><strong id="dayMinutes">8–12</strong><span>минут</span></div>
+          <div><strong id="dayExerciseCount">5</strong><span>упражнений</span></div>
+          <div><strong id="dayRecordingCount">4</strong><span>записи</span></div>
         </div>
 
         <button class="primary-button" id="startSession" type="button">
@@ -130,6 +149,7 @@
       </div>
     </template>
 
+    <script src="./week-data.js" defer></script>
     <script src="./app.js" defer></script>
   </body>
 </html>

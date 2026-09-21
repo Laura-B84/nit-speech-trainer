@@ -1,5 +1,6 @@
 const app = document.querySelector('#app');
 const onboardingTemplate = document.querySelector('#onboardingTemplate');
+const weekTemplate = document.querySelector('#weekTemplate');
 const homeTemplate = document.querySelector('#homeTemplate');
 const sessionTemplate = document.querySelector('#sessionTemplate');
 const ratingTemplate = document.querySelector('#ratingTemplate');
@@ -7,6 +8,7 @@ const ratingTemplate = document.querySelector('#ratingTemplate');
 const STORAGE_KEY = 'nit-session-v1';
 const DB_NAME = 'nit-recordings';
 const DB_VERSION = 1;
+const days = window.NIT_WEEK_DAYS || [];
 
 const goalProfiles = {
   conversation: {
@@ -154,6 +156,13 @@ let soundsEnabled = true;
 function freshState() {
   return {
     profile: null,
+    selectedDay: 1,
+    sessions: {},
+  };
+}
+
+function freshSession() {
+  return {
     startedAt: null,
     completedAt: null,
     stepIndex: 0,
@@ -166,10 +175,36 @@ function freshState() {
 
 function loadState() {
   try {
-    return { ...freshState(), ...JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') };
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    if (stored.sessions) return { ...freshState(), ...stored };
+
+    const migrated = { ...freshState(), profile: stored.profile || null };
+    if (stored.startedAt || stored.completedAt || stored.stepIndex || stored.recordings?.length) {
+      migrated.sessions['1'] = {
+        ...freshSession(),
+        startedAt: stored.startedAt || null,
+        completedAt: stored.completedAt || null,
+        stepIndex: stored.stepIndex || 0,
+        recordings: stored.recordings || [],
+        sprintWords: stored.sprintWords || [],
+        ratings: { ...freshSession().ratings, ...(stored.ratings || {}) },
+        skipped: stored.skipped || [],
+      };
+    }
+    return migrated;
   } catch {
     return freshState();
   }
+}
+
+function currentDay() {
+  return days.find((day) => day.id === Number(state.selectedDay)) || days[0];
+}
+
+function sessionFor(dayId = state.selectedDay) {
+  const key = String(dayId);
+  if (!state.sessions[key]) state.sessions[key] = freshSession();
+  return state.sessions[key];
 }
 
 function saveState() {
@@ -188,24 +223,30 @@ function focusMain() {
 
 function resolveStep(step) {
   const profile = goalProfiles[state.profile] || goalProfiles.conversation;
-  if (step.id === 'baseline') {
-    return { ...step, title: profile.baselineTitle, prompt: profile.baselinePrompt };
+  const tailoredPrompt = step.profilePrompts?.[state.profile];
+  const tailored = tailoredPrompt ? { ...step, prompt: tailoredPrompt } : step;
+  if (tailored.reuseReading) {
+    const readingStep = currentDay().steps.find((item) => item.reading);
+    return { ...tailored, prompt: readingStep?.prompt || tailored.prompt, reading: true };
   }
-  if (step.id === 'thread') {
-    return { ...step, prompt: profile.threadPrompt, anchors: profile.anchors };
+  if (tailored.id === 'baseline') {
+    return { ...tailored, title: profile.baselineTitle, prompt: profile.baselinePrompt };
   }
-  if (step.id === 'shorten') {
-    return { ...step, prompt: profile.shortenPrompt, anchors: profile.shortenAnchors };
+  if (tailored.id === 'thread') {
+    return { ...tailored, prompt: profile.threadPrompt, anchors: profile.anchors };
   }
-  if (step.id === 'sprint') {
-    return { ...step, prompt: profile.sprintPrompt };
+  if (tailored.id === 'shorten') {
+    return { ...tailored, prompt: profile.shortenPrompt, anchors: profile.shortenAnchors };
   }
-  return step;
+  if (tailored.id === 'sprint') {
+    return { ...tailored, prompt: profile.sprintPrompt };
+  }
+  return tailored;
 }
 
 function renderEntry() {
   if (!state.profile || !goalProfiles[state.profile]) renderOnboarding();
-  else renderHome();
+  else renderWeek();
 }
 
 function renderOnboarding() {
@@ -216,7 +257,7 @@ function renderOnboarding() {
   const warning = document.querySelector('#changeWarning');
   let selectedGoal = state.profile;
 
-  warning.hidden = !(state.profile && state.startedAt && !state.completedAt);
+  warning.hidden = !Object.values(state.sessions).some((session) => session.startedAt && !session.completedAt);
 
   document.querySelectorAll('.goal-option').forEach((option) => {
     const selected = option.dataset.goal === selectedGoal;
@@ -241,7 +282,50 @@ function renderOnboarding() {
       state.profile = selectedGoal;
     }
     saveState();
-    renderHome();
+    renderWeek();
+  });
+  focusMain();
+}
+
+function renderWeek() {
+  if (!state.profile || !goalProfiles[state.profile]) {
+    renderOnboarding();
+    return;
+  }
+  stopTimer();
+  stopStream();
+  app.replaceChildren(weekTemplate.content.cloneNode(true));
+
+  const completedDays = days.filter((day) => state.sessions[String(day.id)]?.completedAt).length;
+  document.querySelector('#weekProgressValue').textContent = `${completedDays}/${days.length}`;
+
+  const changeGoal = document.querySelector('#weekChangeGoal');
+  changeGoal.textContent = `Цель: ${goalProfiles[state.profile].label} · изменить`;
+  changeGoal.addEventListener('click', renderOnboarding);
+
+  const list = document.querySelector('#dayList');
+  days.forEach((day) => {
+    const session = state.sessions[String(day.id)];
+    const isComplete = Boolean(session?.completedAt);
+    const isStarted = Boolean(session?.startedAt && !session?.completedAt);
+    const button = document.createElement('button');
+    button.className = `day-card${isComplete ? ' complete' : ''}${isStarted ? ' active' : ''}`;
+    button.type = 'button';
+    button.innerHTML = `
+      <span class="day-number">${isComplete ? '✓' : day.id}</span>
+      <span class="day-icon" aria-hidden="true">${day.icon}</span>
+      <span class="day-copy">
+        <strong>${day.title}</strong>
+        <small>${day.focus} · ${day.minutes} мин</small>
+      </span>
+      <span class="day-status">${isComplete ? 'Готово' : isStarted ? 'Продолжить' : 'Открыть'} →</span>
+    `;
+    button.addEventListener('click', () => {
+      state.selectedDay = day.id;
+      saveState();
+      renderHome();
+    });
+    list.append(button);
   });
   focusMain();
 }
@@ -254,11 +338,21 @@ function renderHome() {
   stopTimer();
   stopStream();
   app.replaceChildren(homeTemplate.content.cloneNode(true));
+  const day = currentDay();
+  const session = sessionFor();
   const start = document.querySelector('#startSession');
   const resumeNote = document.querySelector('#resumeNote');
   const changeGoal = document.querySelector('#changeGoal');
-  const hasProgress = state.startedAt && !state.completedAt;
-  const completed = Boolean(state.completedAt);
+  const hasProgress = session.startedAt && !session.completedAt;
+  const completed = Boolean(session.completedAt);
+
+  document.querySelector('#backWeek').addEventListener('click', renderWeek);
+  document.querySelector('#dayEyebrow').textContent = `День ${day.id} · ${day.focus}`;
+  document.querySelector('#homeTitle').textContent = day.title;
+  document.querySelector('#dayLead').textContent = day.lead;
+  document.querySelector('#dayMinutes').textContent = day.minutes;
+  document.querySelector('#dayExerciseCount').textContent = day.steps.filter((step) => !step.rating).length;
+  document.querySelector('#dayRecordingCount').textContent = day.steps.filter((step) => step.record).length;
 
   changeGoal.textContent = `Цель: ${goalProfiles[state.profile].label} · изменить`;
   changeGoal.addEventListener('click', renderOnboarding);
@@ -266,9 +360,9 @@ function renderHome() {
   if (hasProgress) {
     start.querySelector('span').textContent = 'Продолжить тренировку';
     resumeNote.hidden = false;
-    resumeNote.textContent = state.stepIndex === 0
+    resumeNote.textContent = session.stepIndex === 0
       ? 'Тренировка начата'
-      : `Пройдено: ${state.stepIndex} из ${steps.length} этапов`;
+      : `Пройдено: ${session.stepIndex} из ${day.steps.length} этапов`;
   }
 
   if (completed) {
@@ -278,8 +372,9 @@ function renderHome() {
   }
 
   start.addEventListener('click', () => {
-    if (completed) state = { ...freshState(), profile: state.profile };
-    state.startedAt ||= new Date().toISOString();
+    if (completed) state.sessions[String(day.id)] = freshSession();
+    const activeSession = sessionFor(day.id);
+    activeSession.startedAt ||= new Date().toISOString();
     saveState();
     renderSession();
   });
@@ -290,15 +385,21 @@ function renderSession() {
   stopTimer();
   app.replaceChildren(sessionTemplate.content.cloneNode(true));
 
-  const step = resolveStep(steps[state.stepIndex]);
-  document.querySelector('#stepLabel').textContent = `Этап ${state.stepIndex + 1} из ${steps.length}`;
+  const day = currentDay();
+  const session = sessionFor();
+  const step = resolveStep(day.steps[session.stepIndex]);
+  document.querySelector('#stepLabel').textContent = `День ${day.id} · этап ${session.stepIndex + 1} из ${day.steps.length}`;
   document.querySelector('#stepName').textContent = step.name;
-  document.querySelector('#progressBar').style.width = `${((state.stepIndex + 1) / steps.length) * 100}%`;
+  document.querySelector('#progressBar').style.width = `${((session.stepIndex + 1) / day.steps.length) * 100}%`;
   document.querySelector('#backHome').addEventListener('click', renderHome);
-  document.querySelector('#skipStep').addEventListener('click', () => {
-    state.skipped = [...new Set([...state.skipped, step.id])];
-    nextStep();
-  });
+  const skip = document.querySelector('#skipStep');
+  skip.hidden = Boolean(step.rating);
+  if (!step.rating) {
+    skip.addEventListener('click', () => {
+      session.skipped = [...new Set([...session.skipped, step.id])];
+      nextStep();
+    });
+  }
 
   const card = document.querySelector('#exerciseCard');
   if (step.rating) renderRatings(card, step);
@@ -419,7 +520,9 @@ async function finishRecording() {
   if (currentPhase !== 'recording') return;
   currentPhase = 'done';
   stopTimer();
-  const step = resolveStep(steps[state.stepIndex]);
+  const day = currentDay();
+  const session = sessionFor();
+  const step = resolveStep(day.steps[session.stepIndex]);
   const action = document.querySelector('#recordAction');
   const status = document.querySelector('#recordStatus');
   action.disabled = true;
@@ -432,8 +535,8 @@ async function finishRecording() {
     const blob = new Blob(chunks, { type: mediaRecorder.mimeType || 'audio/webm' });
     const recordId = `${step.id}-${Date.now()}`;
     try {
-      await saveRecording(recordId, blob, { stepId: step.id, createdAt: new Date().toISOString() });
-      state.recordings.push({ id: recordId, stepId: step.id, seconds: step.duration });
+      await saveRecording(recordId, blob, { dayId: day.id, stepId: step.id, createdAt: new Date().toISOString() });
+      session.recordings.push({ id: recordId, stepId: step.id, seconds: step.duration });
       status.textContent = 'Запись сохранена на этом устройстве.';
     } catch {
       status.textContent = 'Запись завершена, но сохранить её не удалось.';
@@ -494,7 +597,7 @@ function renderSprintInput(card, step) {
     save.disabled = words.length === 0;
   });
   save.addEventListener('click', () => {
-    state.sprintWords = parseWords(input.value);
+    sessionFor().sprintWords = parseWords(input.value);
     saveState();
     nextStep();
   });
@@ -512,6 +615,7 @@ function wordForm(number) {
 }
 
 function renderRatings(card, step) {
+  const session = sessionFor();
   card.innerHTML = `${exerciseHeader(step)}`;
   const ratings = [
     { key: 'thread', title: 'Насколько легко было удерживать нить?' },
@@ -524,11 +628,11 @@ function renderRatings(card, step) {
     block.innerHTML = `<h3>${title}</h3>`;
     const row = ratingTemplate.content.cloneNode(true);
     row.querySelectorAll('button').forEach((button) => {
-      if (Number(button.dataset.rating) === state.ratings[key]) button.classList.add('selected');
+      if (Number(button.dataset.rating) === session.ratings[key]) button.classList.add('selected');
       button.addEventListener('click', () => {
-        state.ratings[key] = Number(button.dataset.rating);
+        session.ratings[key] = Number(button.dataset.rating);
         block.querySelectorAll('button').forEach((item) => item.classList.toggle('selected', item === button));
-        finish.disabled = !state.ratings.thread || !state.ratings.words;
+        finish.disabled = !session.ratings.thread || !session.ratings.words;
         saveState();
       });
     });
@@ -542,41 +646,45 @@ function renderRatings(card, step) {
   buttons.innerHTML = '<button class="primary-button" id="finishSession" type="button" disabled><span>Завершить тренировку</span><span aria-hidden="true">→</span></button>';
   card.append(buttons);
   const finish = document.querySelector('#finishSession');
-  finish.disabled = !state.ratings.thread || !state.ratings.words;
+  finish.disabled = !session.ratings.thread || !session.ratings.words;
   finish.addEventListener('click', finishSession);
 }
 
 function finishSession() {
-  state.completedAt = new Date().toISOString();
+  const day = currentDay();
+  const session = sessionFor();
+  session.completedAt = new Date().toISOString();
   saveState();
   document.querySelector('#skipStep').hidden = true;
   document.querySelector('#stepLabel').textContent = 'Тренировка завершена';
-  document.querySelector('#stepName').textContent = 'Стартовая точка сохранена';
+  document.querySelector('#stepName').textContent = `${day.title} — готово`;
   document.querySelector('#progressBar').style.width = '100%';
   const card = document.querySelector('#exerciseCard');
   card.innerHTML = `
-    <div class="stage-tag">День 1 готов</div>
-    <h2>Нить найдена</h2>
-    <p>Стартовая речь сохранена, а три способа удержать мысль проверены на практике.</p>
+    <div class="stage-tag">День ${day.id} готов</div>
+    <h2>${day.title}</h2>
+    <p>Ты прочитала текст вслух и перенесла навык в самостоятельную речь. Результат сохранён на этом устройстве.</p>
     <div class="summary-grid">
-      <div class="summary-card"><strong>${state.recordings.length}</strong><span>голосовые записи</span></div>
-      <div class="summary-card"><strong>${state.sprintWords.length}</strong><span>точных глаголов</span></div>
-      <div class="summary-card"><strong>${state.ratings.thread}/5</strong><span>удерживать нить</span></div>
-      <div class="summary-card"><strong>${state.ratings.words}/5</strong><span>находить слова</span></div>
+      <div class="summary-card"><strong>${session.recordings.length}</strong><span>голосовые записи</span></div>
+      <div class="summary-card"><strong>${session.sprintWords.length}</strong><span>слов в спринте</span></div>
+      <div class="summary-card"><strong>${session.ratings.thread}/5</strong><span>удерживать нить</span></div>
+      <div class="summary-card"><strong>${session.ratings.words}/5</strong><span>находить слова</span></div>
     </div>
-    <div class="rescue-card"><span>Фраза на случай паузы</span><strong>«Покажу это на примере»</strong></div>
+    <div class="rescue-card"><span>Главный результат</span><strong>Ты закончила мысль, даже если говорила неидеально.</strong></div>
     <div class="button-stack">
-      <button class="primary-button" id="finishHome" type="button"><span>На главную</span><span aria-hidden="true">→</span></button>
+      <button class="primary-button" id="finishHome" type="button"><span>К неделе</span><span aria-hidden="true">→</span></button>
     </div>
   `;
-  document.querySelector('#finishHome').addEventListener('click', renderHome);
+  document.querySelector('#finishHome').addEventListener('click', renderWeek);
 }
 
 function nextStep() {
   stopTimer();
   stopStream();
   currentPhase = 'idle';
-  state.stepIndex = Math.min(state.stepIndex + 1, steps.length - 1);
+  const day = currentDay();
+  const session = sessionFor();
+  session.stepIndex = Math.min(session.stepIndex + 1, day.steps.length - 1);
   saveState();
   renderSession();
 }
@@ -637,6 +745,12 @@ document.querySelector('#soundToggle').addEventListener('click', (event) => {
   soundsEnabled = !soundsEnabled;
   event.currentTarget.setAttribute('aria-label', soundsEnabled ? 'Выключить звуки' : 'Включить звуки');
   event.currentTarget.style.opacity = soundsEnabled ? '1' : '0.45';
+});
+
+document.querySelector('.brand').addEventListener('click', (event) => {
+  event.preventDefault();
+  if (state.profile) renderWeek();
+  else renderOnboarding();
 });
 
 window.addEventListener('beforeunload', () => {
