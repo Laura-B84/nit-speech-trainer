@@ -38,6 +38,44 @@
       </footer>
     </div>
 
+    <template id="onboardingTemplate">
+      <section class="onboarding-view" aria-labelledby="goalTitle">
+        <div class="eyebrow">Настроим тренировку</div>
+        <h1 id="goalTitle">Для чего тебе нужна уверенная речь?</h1>
+        <p class="lead">Тексты для чтения будут общими, а задания для свободной речи — под твою цель.</p>
+
+        <div class="goal-list" role="radiogroup" aria-label="Цель тренировки">
+          <button class="goal-option" type="button" role="radio" aria-checked="false" data-goal="conversation">
+            <strong>Свободно общаться</strong>
+            <span>Поддерживать разговор и не терять мысль</span>
+          </button>
+          <button class="goal-option" type="button" role="radio" aria-checked="false" data-goal="words">
+            <strong>Быстрее находить слова</strong>
+            <span>Говорить точнее и реже зависать в поиске</span>
+          </button>
+          <button class="goal-option" type="button" role="radio" aria-checked="false" data-goal="speaker">
+            <strong>Проводить лекции и занятия</strong>
+            <span>Объяснять материал ясно и уверенно</span>
+          </button>
+          <button class="goal-option" type="button" role="radio" aria-checked="false" data-goal="work">
+            <strong>Уверенно говорить на работе</strong>
+            <span>Выступать на встречах и объяснять решения</span>
+          </button>
+          <button class="goal-option" type="button" role="radio" aria-checked="false" data-goal="creator">
+            <strong>Записывать видео и вести блог</strong>
+            <span>Говорить живо без заученного текста</span>
+          </button>
+        </div>
+
+        <p class="change-warning" id="changeWarning" hidden>Смена цели начнёт текущую тренировку заново.</p>
+
+        <button class="primary-button" id="saveGoal" type="button" disabled>
+          <span>Продолжить</span>
+          <span aria-hidden="true">→</span>
+        </button>
+      </section>
+    </template>
+
     <template id="homeTemplate">
       <section class="home-view" aria-labelledby="homeTitle">
         <div class="eyebrow">Неделя 1 · Стартовая тренировка</div>
@@ -50,11 +88,12 @@
         <p class="lead">
           Научимся удерживать направление ответа, находить точные слова и уверенно завершать мысль.
         </p>
+        <button class="goal-chip" id="changeGoal" type="button"></button>
 
         <div class="session-facts" aria-label="Параметры тренировки">
           <div><strong>8–12</strong><span>минут</span></div>
-          <div><strong>4</strong><span>упражнения</span></div>
-          <div><strong>3</strong><span>записи</span></div>
+          <div><strong>5</strong><span>упражнений</span></div>
+          <div><strong>4</strong><span>записи</span></div>
         </div>
 
         <button class="primary-button" id="startSession" type="button">
@@ -70,7 +109,7 @@
         <div class="session-head">
           <button class="back-button" id="backHome" type="button" aria-label="Вернуться на главную">←</button>
           <div class="progress-copy">
-            <span id="stepLabel">Этап 1 из 5</span>
+            <span id="stepLabel">Этап 1 из 6</span>
             <strong id="stepName">Контрольная запись</strong>
           </div>
           <button class="text-button" id="skipStep" type="button">Пропустить</button>
@@ -94,4 +133,3 @@
     <script src="./app.js" defer></script>
   </body>
 </html>
-

@@ -1,4 +1,5 @@
 const app = document.querySelector('#app');
+const onboardingTemplate = document.querySelector('#onboardingTemplate');
 const homeTemplate = document.querySelector('#homeTemplate');
 const sessionTemplate = document.querySelector('#sessionTemplate');
 const ratingTemplate = document.querySelector('#ratingTemplate');
@@ -6,6 +7,59 @@ const ratingTemplate = document.querySelector('#ratingTemplate');
 const STORAGE_KEY = 'nit-session-v1';
 const DB_NAME = 'nit-recordings';
 const DB_VERSION = 1;
+
+const goalProfiles = {
+  conversation: {
+    label: 'Свободное общение',
+    baselineTitle: 'Расскажи о деле, которое тебе нравится',
+    baselinePrompt: 'Какое занятие тебе нравится и почему ты возвращаешься к нему?',
+    threadPrompt: 'Почему это занятие важно для тебя?',
+    anchors: ['тема', 'причина', 'пример', 'вывод'],
+    shortenPrompt: 'Объясни тремя предложениями, почему ты ценишь это занятие.',
+    shortenAnchors: ['мне нравится…', 'потому что…', 'поэтому…'],
+    sprintPrompt: 'Сделать подарок, ужин, выбор, вывод… Какие действия точнее?',
+  },
+  words: {
+    label: 'Точные слова',
+    baselineTitle: 'Расскажи о полезном навыке',
+    baselinePrompt: 'Какой навык недавно появился у тебя и где он пригодился?',
+    threadPrompt: 'Как ты осваивала этот навык и что изменилось?',
+    anchors: ['навык', 'трудность', 'действие', 'результат'],
+    shortenPrompt: 'Передай эту историю тремя точными предложениями.',
+    shortenAnchors: ['раньше…', 'затем…', 'теперь…'],
+    sprintPrompt: 'Сделать выбор, проект, упражнение, вывод… Какие действия точнее?',
+  },
+  speaker: {
+    label: 'Лекции и занятия',
+    baselineTitle: 'Расскажи, чему ты хочешь научить людей',
+    baselinePrompt: 'Чему ты хочешь научить людей на своих занятиях и почему это для них важно?',
+    threadPrompt: 'Как ты создаёшь обучение, которое приносит практический результат?',
+    anchors: ['задача', 'затруднение', 'обучение', 'результат'],
+    shortenPrompt: 'Объясни свой подход к обучению тремя короткими предложениями.',
+    shortenAnchors: ['я выясняю…', 'на занятии человек…', 'после обучения он…'],
+    sprintPrompt: 'Сделать ассистента, программу, упражнение, вывод… Какие действия точнее?',
+  },
+  work: {
+    label: 'Речь для работы',
+    baselineTitle: 'Расскажи о рабочей задаче',
+    baselinePrompt: 'Какую рабочую задачу ты умеешь решать особенно хорошо и почему?',
+    threadPrompt: 'Как ты обычно подходишь к сложной рабочей задаче?',
+    anchors: ['задача', 'подход', 'пример', 'результат'],
+    shortenPrompt: 'Объясни свой рабочий подход тремя короткими предложениями.',
+    shortenAnchors: ['сначала…', 'затем…', 'в результате…'],
+    sprintPrompt: 'Сделать отчёт, проект, встречу, вывод… Какие действия точнее?',
+  },
+  creator: {
+    label: 'Видео и блог',
+    baselineTitle: 'Расскажи об идее для публикации',
+    baselinePrompt: 'О какой теме тебе хочется рассказать аудитории и почему?',
+    threadPrompt: 'Какую пользу получит аудитория от этой темы?',
+    anchors: ['тема', 'польза', 'пример', 'вывод'],
+    shortenPrompt: 'Сформулируй идею публикации тремя короткими предложениями.',
+    shortenAnchors: ['эта тема…', 'она полезна…', 'главная мысль…'],
+    sprintPrompt: 'Сделать видео, пост, кадр, вывод… Какие действия точнее?',
+  },
+};
 
 const steps = [
   {
@@ -17,6 +71,26 @@ const steps = [
     prompt: 'Чему я хочу научить людей на своих занятиях и почему это для них важно?',
     prep: 15,
     duration: 90,
+    record: true,
+  },
+  {
+    id: 'reading',
+    name: 'Чтение вслух',
+    tag: 'Одна страница',
+    title: 'Прочитай, не ускоряясь',
+    description: 'Сохраняй спокойный темп. В конце каждого предложения делай короткую смысловую паузу.',
+    prompt: `Когда человек выступает без заметок, ему кажется, что главное — помнить каждое слово. Но слушатель не знает подготовленного текста и не заметит, если одна формулировка заменит другую. Гораздо важнее удерживать направление мысли.
+
+Представьте, что выступление — это маршрут с несколькими остановками. Сначала вы называете тему, затем раскрываете две или три основные идеи, приводите пример и завершаете выводом. Между остановками можно выбирать разные слова, делать паузы и уточнять сказанное. Пока маршрут остаётся понятным, речь не рассыпается.
+
+Пауза часто пугает самого говорящего сильнее, чем аудиторию. Выступающему кажется, что молчание затянулось, хотя слушатель в этот момент успевает осмыслить услышанное. Поэтому не обязательно заполнять каждую секунду словами «вот», «как бы» или «то есть». Иногда достаточно остановиться, вдохнуть и продолжить с простой фразы: «Вернусь к главной мысли».
+
+Если во время выступления вы забыли точное слово, не задерживайте всю фразу. Назовите предмет или действие проще, опишите смысл другими словами и двигайтесь дальше. Точную формулировку можно вернуть позднее. Для аудитории уверенное продолжение обычно важнее идеального слова, найденного после долгой мучительной паузы. Так сохраняются и контакт со слушателями, и собственная нить рассуждения.
+
+Уверенная речь рождается не из безошибочности. Она появляется, когда человек умеет заметить сбой, не ругать себя и снова найти направление. Это навык, который развивается постепенно: от одной ясной фразы — к абзацу, от абзаца — к целому выступлению.`,
+    reading: true,
+    prep: 10,
+    duration: 120,
     record: true,
   },
   {
@@ -79,6 +153,7 @@ let soundsEnabled = true;
 
 function freshState() {
   return {
+    profile: null,
     startedAt: null,
     completedAt: null,
     stepIndex: 0,
@@ -111,19 +186,89 @@ function focusMain() {
   requestAnimationFrame(() => app.focus());
 }
 
+function resolveStep(step) {
+  const profile = goalProfiles[state.profile] || goalProfiles.conversation;
+  if (step.id === 'baseline') {
+    return { ...step, title: profile.baselineTitle, prompt: profile.baselinePrompt };
+  }
+  if (step.id === 'thread') {
+    return { ...step, prompt: profile.threadPrompt, anchors: profile.anchors };
+  }
+  if (step.id === 'shorten') {
+    return { ...step, prompt: profile.shortenPrompt, anchors: profile.shortenAnchors };
+  }
+  if (step.id === 'sprint') {
+    return { ...step, prompt: profile.sprintPrompt };
+  }
+  return step;
+}
+
+function renderEntry() {
+  if (!state.profile || !goalProfiles[state.profile]) renderOnboarding();
+  else renderHome();
+}
+
+function renderOnboarding() {
+  stopTimer();
+  stopStream();
+  app.replaceChildren(onboardingTemplate.content.cloneNode(true));
+  const save = document.querySelector('#saveGoal');
+  const warning = document.querySelector('#changeWarning');
+  let selectedGoal = state.profile;
+
+  warning.hidden = !(state.profile && state.startedAt && !state.completedAt);
+
+  document.querySelectorAll('.goal-option').forEach((option) => {
+    const selected = option.dataset.goal === selectedGoal;
+    option.classList.toggle('selected', selected);
+    option.setAttribute('aria-checked', String(selected));
+    option.addEventListener('click', () => {
+      selectedGoal = option.dataset.goal;
+      document.querySelectorAll('.goal-option').forEach((item) => {
+        const isSelected = item === option;
+        item.classList.toggle('selected', isSelected);
+        item.setAttribute('aria-checked', String(isSelected));
+      });
+      save.disabled = false;
+    });
+  });
+
+  save.disabled = !selectedGoal;
+  save.addEventListener('click', () => {
+    if (state.profile !== selectedGoal || !state.profile) {
+      state = { ...freshState(), profile: selectedGoal };
+    } else {
+      state.profile = selectedGoal;
+    }
+    saveState();
+    renderHome();
+  });
+  focusMain();
+}
+
 function renderHome() {
+  if (!state.profile || !goalProfiles[state.profile]) {
+    renderOnboarding();
+    return;
+  }
   stopTimer();
   stopStream();
   app.replaceChildren(homeTemplate.content.cloneNode(true));
   const start = document.querySelector('#startSession');
   const resumeNote = document.querySelector('#resumeNote');
+  const changeGoal = document.querySelector('#changeGoal');
   const hasProgress = state.startedAt && !state.completedAt;
   const completed = Boolean(state.completedAt);
+
+  changeGoal.textContent = `Цель: ${goalProfiles[state.profile].label} · изменить`;
+  changeGoal.addEventListener('click', renderOnboarding);
 
   if (hasProgress) {
     start.querySelector('span').textContent = 'Продолжить тренировку';
     resumeNote.hidden = false;
-    resumeNote.textContent = `Сохранено: ${state.stepIndex} из 5 этапов`;
+    resumeNote.textContent = state.stepIndex === 0
+      ? 'Тренировка начата'
+      : `Пройдено: ${state.stepIndex} из ${steps.length} этапов`;
   }
 
   if (completed) {
@@ -133,7 +278,7 @@ function renderHome() {
   }
 
   start.addEventListener('click', () => {
-    if (completed) state = freshState();
+    if (completed) state = { ...freshState(), profile: state.profile };
     state.startedAt ||= new Date().toISOString();
     saveState();
     renderSession();
@@ -145,7 +290,7 @@ function renderSession() {
   stopTimer();
   app.replaceChildren(sessionTemplate.content.cloneNode(true));
 
-  const step = steps[state.stepIndex];
+  const step = resolveStep(steps[state.stepIndex]);
   document.querySelector('#stepLabel').textContent = `Этап ${state.stepIndex + 1} из ${steps.length}`;
   document.querySelector('#stepName').textContent = step.name;
   document.querySelector('#progressBar').style.width = `${((state.stepIndex + 1) / steps.length) * 100}%`;
@@ -167,7 +312,7 @@ function exerciseHeader(step) {
     <div class="stage-tag">${step.tag}</div>
     <h2>${step.title}</h2>
     <p>${step.description}</p>
-    ${step.prompt ? `<div class="prompt-box">${step.prompt}</div>` : ''}
+    ${step.prompt ? `<div class="prompt-box${step.reading ? ' reading-text' : ''}">${step.reading ? step.prompt.split('\n\n').map((paragraph) => `<p>${paragraph}</p>`).join('') : step.prompt}</div>` : ''}
     ${step.anchors ? `<div class="anchors">${step.anchors.map((item) => `<span>${item}</span>`).join('')}</div>` : ''}
     ${step.rescue ? `<p class="status-message">${step.rescue}</p>` : ''}
   `;
@@ -274,7 +419,7 @@ async function finishRecording() {
   if (currentPhase !== 'recording') return;
   currentPhase = 'done';
   stopTimer();
-  const step = steps[state.stepIndex];
+  const step = resolveStep(steps[state.stepIndex]);
   const action = document.querySelector('#recordAction');
   const status = document.querySelector('#recordStatus');
   action.disabled = true;
@@ -412,7 +557,7 @@ function finishSession() {
   card.innerHTML = `
     <div class="stage-tag">День 1 готов</div>
     <h2>Нить найдена</h2>
-    <p>Сегодня ты зафиксировала стартовую речь и попробовала три способа удержать мысль.</p>
+    <p>Стартовая речь сохранена, а три способа удержать мысль проверены на практике.</p>
     <div class="summary-grid">
       <div class="summary-card"><strong>${state.recordings.length}</strong><span>голосовые записи</span></div>
       <div class="summary-card"><strong>${state.sprintWords.length}</strong><span>точных глаголов</span></div>
@@ -499,4 +644,4 @@ window.addEventListener('beforeunload', () => {
   stopStream();
 });
 
-renderHome();
+renderEntry();
