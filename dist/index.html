@@ -91,6 +91,18 @@
         </div>
         <button class="goal-chip" id="weekChangeGoal" type="button"></button>
         <div class="day-list" id="dayList"></div>
+        <div class="reset-zone">
+          <button class="text-button reset-trigger" id="resetProgress" type="button">Сбросить прогресс</button>
+          <div class="reset-panel" id="resetPanel" hidden>
+            <strong>Начать тестирование заново?</strong>
+            <p>Будут удалены весь прогресс и голосовые записи из этого браузера. Сначала скачай нужные записи.</p>
+            <div class="reset-actions">
+              <button class="secondary-button" id="cancelReset" type="button">Отмена</button>
+              <button class="danger-button" id="confirmReset" type="button">Удалить всё</button>
+            </div>
+            <p class="status-message" id="resetStatus" aria-live="polite"></p>
+          </div>
+        </div>
       </section>
     </template>
 
@@ -120,6 +132,13 @@
           <span aria-hidden="true">→</span>
         </button>
         <p class="resume-note" id="resumeNote" hidden></p>
+
+        <section class="saved-recordings" id="savedRecordings" aria-labelledby="savedRecordingsTitle" hidden>
+          <h2 id="savedRecordingsTitle">Записи этого дня</h2>
+          <p>Скачай нужные записи, чтобы они сохранились вне браузера.</p>
+          <div class="recording-list" id="recordingList"></div>
+          <p class="status-message" id="downloadStatus" aria-live="polite"></p>
+        </section>
       </section>
     </template>
 

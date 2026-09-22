@@ -332,6 +332,38 @@ function renderWeek() {
     });
     list.append(button);
   });
+
+  const resetTrigger = document.querySelector('#resetProgress');
+  const resetPanel = document.querySelector('#resetPanel');
+  const cancelReset = document.querySelector('#cancelReset');
+  const confirmReset = document.querySelector('#confirmReset');
+  const resetStatus = document.querySelector('#resetStatus');
+
+  resetTrigger.addEventListener('click', () => {
+    resetTrigger.hidden = true;
+    resetPanel.hidden = false;
+    confirmReset.focus();
+  });
+  cancelReset.addEventListener('click', () => {
+    resetPanel.hidden = true;
+    resetTrigger.hidden = false;
+    resetTrigger.focus();
+  });
+  confirmReset.addEventListener('click', async () => {
+    confirmReset.disabled = true;
+    cancelReset.disabled = true;
+    resetStatus.textContent = 'Удаляем прогресс и записи…';
+    try {
+      await clearAllRecordings();
+      localStorage.removeItem(STORAGE_KEY);
+      state = freshState();
+      renderOnboarding();
+    } catch {
+      confirmReset.disabled = false;
+      cancelReset.disabled = false;
+      resetStatus.textContent = 'Не удалось удалить данные. Попробуй ещё раз.';
+    }
+  });
   focusMain();
 }
 
@@ -362,6 +394,7 @@ function renderHome() {
 
   changeGoal.textContent = `Цель: ${goalProfiles[state.profile].label} · изменить`;
   changeGoal.addEventListener('click', renderOnboarding);
+  renderSavedRecordings(day, session);
 
   if (hasProgress) {
     start.querySelector('span').textContent = 'Продолжить тренировку';
@@ -378,7 +411,12 @@ function renderHome() {
   }
 
   start.addEventListener('click', () => {
-    if (completed) state.sessions[String(day.id)] = freshSession();
+    if (completed) {
+      state.sessions[String(day.id)] = {
+        ...freshSession(),
+        recordings: [...session.recordings],
+      };
+    }
     const activeSession = sessionFor(day.id);
     activeSession.startedAt ||= new Date().toISOString();
     saveState();
@@ -536,6 +574,7 @@ async function finishRecording() {
   const card = document.querySelector('#exerciseCard');
   action.disabled = true;
   let savedBlob = null;
+  let savedMetadata = null;
 
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
     await new Promise((resolve) => {
@@ -544,9 +583,11 @@ async function finishRecording() {
     });
     const blob = new Blob(chunks, { type: mediaRecorder.mimeType || 'audio/webm' });
     const recordId = `${step.id}-${Date.now()}`;
+    const createdAt = new Date().toISOString();
     try {
-      await saveRecording(recordId, blob, { dayId: day.id, stepId: step.id, createdAt: new Date().toISOString() });
-      session.recordings.push({ id: recordId, stepId: step.id, seconds: step.duration });
+      savedMetadata = { id: recordId, dayId: day.id, stepId: step.id, createdAt };
+      await saveRecording(recordId, blob, savedMetadata);
+      session.recordings.push({ id: recordId, stepId: step.id, seconds: step.duration, createdAt });
       savedBlob = blob;
       status.textContent = 'Запись сохранена только в этом браузере. Слушать её необязательно.';
     } catch {
@@ -563,6 +604,7 @@ async function finishRecording() {
   buttons.className = 'button-stack';
   buttons.innerHTML = `
     ${savedBlob ? '<button class="secondary-button" id="previewRecording" type="button">Прослушать первые 10 секунд · необязательно</button>' : ''}
+    ${savedBlob ? '<button class="secondary-button" id="downloadRecording" type="button">Скачать запись</button>' : ''}
     <button class="secondary-button" id="repeatRecording" type="button">Записать ещё раз</button>
     <button class="primary-button" id="continueAfterRecording" type="button"><span>Продолжить без прослушивания</span><span aria-hidden="true">→</span></button>
   `;
@@ -575,6 +617,10 @@ async function finishRecording() {
   });
 
   if (savedBlob) {
+    document.querySelector('#downloadRecording').addEventListener('click', () => {
+      downloadBlob(savedBlob, savedMetadata);
+      status.textContent = 'Запись скачана на устройство.';
+    });
     clearPlayback();
     playbackUrl = URL.createObjectURL(savedBlob);
     const preview = document.querySelector('#previewRecording');
@@ -794,8 +840,95 @@ async function saveRecording(id, blob, metadata) {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction('recordings', 'readwrite');
     transaction.objectStore('recordings').put({ id, blob, ...metadata });
-    transaction.addEventListener('complete', resolve);
-    transaction.addEventListener('error', () => reject(transaction.error));
+    transaction.addEventListener('complete', () => {
+      db.close();
+      resolve();
+    });
+    transaction.addEventListener('error', () => {
+      db.close();
+      reject(transaction.error);
+    });
+  });
+}
+
+async function getRecording(id) {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction('recordings', 'readonly');
+    const request = transaction.objectStore('recordings').get(id);
+    request.addEventListener('success', () => resolve(request.result));
+    request.addEventListener('error', () => reject(request.error));
+    transaction.addEventListener('complete', () => db.close());
+    transaction.addEventListener('error', () => db.close());
+  });
+}
+
+async function clearAllRecordings() {
+  const db = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction('recordings', 'readwrite');
+    transaction.objectStore('recordings').clear();
+    transaction.addEventListener('complete', () => {
+      db.close();
+      resolve();
+    });
+    transaction.addEventListener('error', () => {
+      db.close();
+      reject(transaction.error);
+    });
+  });
+}
+
+function audioExtension(blob) {
+  const type = blob?.type || '';
+  if (type.includes('ogg')) return 'ogg';
+  if (type.includes('mp4') || type.includes('m4a')) return 'm4a';
+  if (type.includes('wav')) return 'wav';
+  return 'webm';
+}
+
+function downloadBlob(blob, metadata = {}) {
+  const dayId = metadata.dayId || state.selectedDay;
+  const stepId = metadata.stepId || 'recording';
+  const date = String(metadata.createdAt || new Date().toISOString()).slice(0, 10);
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `nit-day-${dayId}-${stepId}-${date}.${audioExtension(blob)}`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function renderSavedRecordings(day, session) {
+  const section = document.querySelector('#savedRecordings');
+  const list = document.querySelector('#recordingList');
+  const status = document.querySelector('#downloadStatus');
+  if (!section || !session.recordings.length) return;
+
+  section.hidden = false;
+  session.recordings.forEach((recording, index) => {
+    const step = day.steps.find((item) => item.id === recording.stepId);
+    const button = document.createElement('button');
+    button.className = 'secondary-button recording-download';
+    button.type = 'button';
+    button.textContent = `Скачать ${index + 1} · ${step?.name || 'Запись'}`;
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      status.textContent = 'Готовим файл…';
+      try {
+        const saved = await getRecording(recording.id);
+        if (!saved?.blob) throw new Error('Recording not found');
+        downloadBlob(saved.blob, saved);
+        status.textContent = 'Запись скачана на устройство.';
+      } catch {
+        status.textContent = 'Не удалось найти запись в этом браузере.';
+      } finally {
+        button.disabled = false;
+      }
+    });
+    list.append(button);
   });
 }
 
