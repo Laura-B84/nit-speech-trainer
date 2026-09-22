@@ -13,6 +13,22 @@ const PREVIEW_SECONDS = 30;
 const days = window.NIT_WEEK_DAYS || [];
 const readingVariants = window.NIT_READING_VARIANTS || {};
 
+const rehearsalFocusOptions = [
+  { id: 'start', label: 'Начать яснее', tip: 'Скажи главную мысль уже в первой фразе.' },
+  { id: 'thread', label: 'Не терять нить', tip: 'Держись трёх опор: мысль, пример, вывод.' },
+  { id: 'shorter', label: 'Говорить короче', tip: 'Убери повторения и оставь только важные детали.' },
+  { id: 'words', label: 'Точнее подобрать слова', tip: 'Замени одно общее слово более конкретным.' },
+  { id: 'finish', label: 'Увереннее завершить', tip: 'Закрой ответ одной ясной итоговой фразой.' },
+];
+
+const rehearsalSuggestions = {
+  conversation: 'Расскажи о ситуации, когда ты изменила своё решение, и объясни почему.',
+  words: 'Объясни простыми словами навык, который недавно тебе пригодился.',
+  speaker: 'Объясни, чему ты хочешь научить людей и какой результат они смогут получить.',
+  work: 'Расскажи о рабочем решении: какая была задача, что ты сделала и что получилось.',
+  creator: 'Расскажи идею будущего видео или публикации и объясни, чем она полезна аудитории.',
+};
+
 const warmupVariants = [
   {
     breath: 'Спокойно вдохни носом. На выдохе мягко тяни «с-с-с», не выжимая воздух до конца.',
@@ -210,6 +226,10 @@ function freshSession() {
     sprintWords: [],
     ratings: { thread: null, words: null },
     skipped: [],
+    practiceFormat: 1,
+    customSpeechText: '',
+    customSpeechMode: null,
+    rehearsalFocus: null,
   };
 }
 
@@ -223,6 +243,10 @@ function loadState() {
           session.formatVersion = SESSION_FORMAT;
           session.contentVariant = null;
         }
+        if (!session.startedAt && !session.completedAt) session.practiceFormat ??= 1;
+        session.customSpeechText ??= '';
+        session.customSpeechMode ??= null;
+        session.rehearsalFocus ??= null;
       });
       return loaded;
     }
@@ -271,6 +295,16 @@ function focusMain() {
   requestAnimationFrame(() => app.focus());
 }
 
+function escapeHtml(value = '') {
+  return String(value).replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;',
+  })[character]);
+}
+
 function countWords(text) {
   return text.trim().split(/\s+/).filter(Boolean).length;
 }
@@ -307,15 +341,72 @@ function warmupStep(day, session) {
   };
 }
 
+function daySevenPracticeSteps(day) {
+  const reading = day.steps.find((step) => step.reading);
+  return [
+    reading,
+    {
+      id: 'd7-topic', name: 'Тема репетиции', tag: 'Своя или готовая тема',
+      title: 'Выбери, о чём говорить',
+      description: 'Вставь готовый текст или напиши тему и опорные мысли. Если своей задачи сейчас нет, возьми тему от приложения.',
+      speechSetup: true,
+    },
+    {
+      id: 'd7-rehearsal-1', name: 'Первая попытка', tag: '90 секунд',
+      title: 'Скажи так, как получается сейчас',
+      description: 'Не исправляй себя на ходу. Задача первой попытки — услышать текущую версию.',
+      rehearsal: true, attempt: 1, prep: 15, duration: 90, record: true,
+    },
+    {
+      id: 'd7-review', name: 'Одно улучшение', tag: 'Перед второй попыткой',
+      title: 'Что изменишь сейчас?',
+      description: 'Выбери только один элемент. Так разницу между попытками будет легче заметить.',
+      rehearsalReview: true,
+    },
+    {
+      id: 'd7-rehearsal-2', name: 'Вторая попытка', tag: '90 секунд',
+      title: 'Повтори ту же речь',
+      description: 'Сохрани тему и измени только выбранный элемент.',
+      rehearsal: true, attempt: 2, prep: 10, duration: 90, record: true,
+    },
+    {
+      id: 'd7-rehearsal-short', name: 'Короткая версия', tag: '30 секунд',
+      title: 'Оставь самое важное',
+      description: 'Передай ту же мысль короче: главная фраза, один пример и вывод.',
+      rehearsal: true, shortVersion: true, prep: 5, duration: 30, record: true,
+    },
+    {
+      id: 'd7-rating', name: 'Самооценка', tag: 'Итог недели',
+      title: 'Как изменилась речь?',
+      description: 'Оцени лёгкость второй попытки, а не идеальность результата.',
+      rating: true,
+    },
+  ];
+}
+
 function stepsForSession(day = currentDay(), session = sessionFor(day.id)) {
   if (session.formatVersion !== SESSION_FORMAT) return day.steps;
-  return [warmupStep(day, session), ...day.steps];
+  const baseSteps = day.id === 7 && session.practiceFormat === 1
+    ? daySevenPracticeSteps(day)
+    : day.steps;
+  return [warmupStep(day, session), ...baseSteps];
 }
 
 function resolveStep(step) {
   const profile = goalProfiles[state.profile] || goalProfiles.conversation;
+  const session = sessionFor();
   const tailoredPrompt = step.profilePrompts?.[state.profile];
   let tailored = tailoredPrompt ? { ...step, prompt: tailoredPrompt } : step;
+  if (tailored.rehearsal) {
+    const focus = rehearsalFocusOptions.find((item) => item.id === session.rehearsalFocus);
+    return {
+      ...tailored,
+      prompt: session.customSpeechText || rehearsalSuggestions[state.profile] || rehearsalSuggestions.conversation,
+      userText: true,
+      helpTitle: tailored.attempt === 2 ? 'Твой фокус' : tailored.shortVersion ? 'Структура' : null,
+      helpText: tailored.attempt === 2 ? focus?.tip : tailored.shortVersion ? 'Главная мысль → один пример → вывод.' : null,
+    };
+  }
   if (tailored.reuseReading) {
     const readingStep = currentDay().steps.find((item) => item.reading);
     const resolvedReading = readingStep ? resolveReading(readingStep) : null;
@@ -484,7 +575,7 @@ function renderHome() {
   document.querySelector('#dayLead').textContent = day.lead;
   document.querySelector('#dayMinutes').textContent = day.minutes;
   document.querySelector('#dayExerciseCount').textContent = sessionSteps.filter((step) => !step.rating).length;
-  document.querySelector('#dayRecordingCount').textContent = day.steps.filter((step) => step.record).length;
+  document.querySelector('#dayRecordingCount').textContent = sessionSteps.filter((step) => step.record).length;
 
   changeGoal.textContent = `Цель: ${goalProfiles[state.profile].label} · изменить`;
   changeGoal.addEventListener('click', renderOnboarding);
@@ -537,8 +628,8 @@ function renderSession() {
   document.querySelector('#progressBar').style.width = `${((session.stepIndex + 1) / sessionSteps.length) * 100}%`;
   document.querySelector('#backHome').addEventListener('click', renderHome);
   const skip = document.querySelector('#skipStep');
-  skip.hidden = Boolean(step.rating);
-  if (!step.rating) {
+  skip.hidden = Boolean(step.rating || step.speechSetup || step.rehearsalReview);
+  if (!skip.hidden) {
     skip.addEventListener('click', () => {
       session.skipped = [...new Set([...session.skipped, step.id])];
       nextStep();
@@ -548,21 +639,107 @@ function renderSession() {
   const card = document.querySelector('#exerciseCard');
   if (step.rating) renderRatings(card, step);
   else if (step.warmup) renderWarmup(card, step);
+  else if (step.speechSetup) renderSpeechSetup(card, step);
+  else if (step.rehearsalReview) renderRehearsalReview(card, step);
   else if (step.sprint) renderSprint(card, step);
   else renderRecording(card, step);
   focusMain();
 }
 
 function exerciseHeader(step) {
+  const promptClass = step.reading ? ' reading-text' : step.userText ? ' user-speech-text' : '';
+  const prompt = step.prompt
+    ? `<div class="prompt-box${promptClass}">${step.reading
+      ? step.prompt.split('\n\n').map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`).join('')
+      : escapeHtml(step.prompt)}</div>`
+    : '';
   return `
-    <div class="stage-tag">${step.tag}</div>
-    <h2>${step.title}</h2>
-    <p>${step.description}</p>
-    ${step.prompt ? `<div class="prompt-box${step.reading ? ' reading-text' : ''}">${step.reading ? step.prompt.split('\n\n').map((paragraph) => `<p>${paragraph}</p>`).join('') : step.prompt}</div>` : ''}
-    ${step.helpText ? `<div class="learning-card"><strong>${step.helpTitle || 'Как выполнить'}</strong><span>${step.helpText}</span></div>` : ''}
-    ${step.anchors ? `<div class="anchors">${step.anchors.map((item) => `<span>${item}</span>`).join('')}</div>` : ''}
-    ${step.rescue ? `<p class="status-message">${step.rescue}</p>` : ''}
+    <div class="stage-tag">${escapeHtml(step.tag)}</div>
+    <h2>${escapeHtml(step.title)}</h2>
+    <p>${escapeHtml(step.description)}</p>
+    ${prompt}
+    ${step.helpText ? `<div class="learning-card"><strong>${escapeHtml(step.helpTitle || 'Как выполнить')}</strong><span>${escapeHtml(step.helpText)}</span></div>` : ''}
+    ${step.anchors ? `<div class="anchors">${step.anchors.map((item) => `<span>${escapeHtml(item)}</span>`).join('')}</div>` : ''}
+    ${step.rescue ? `<p class="status-message">${escapeHtml(step.rescue)}</p>` : ''}
   `;
+}
+
+function renderSpeechSetup(card, step) {
+  const session = sessionFor();
+  const suggested = rehearsalSuggestions[state.profile] || rehearsalSuggestions.conversation;
+  card.innerHTML = `
+    ${exerciseHeader(step)}
+    <label class="input-label" for="customSpeechText">Текст, тема или опорные мысли</label>
+    <textarea class="word-input speech-input" id="customSpeechText" maxlength="2000" placeholder="Например: объяснить новый проект — проблема, решение, результат"></textarea>
+    <div class="input-meta"><span>Сохраняется только в этом браузере</span><span id="speechCharacterCount">0 / 2000</span></div>
+    <div class="suggested-topic">
+      <span>Готовая тема</span>
+      <p>${escapeHtml(suggested)}</p>
+    </div>
+    <div class="button-stack">
+      <button class="secondary-button" id="useSuggestedSpeech" type="button">Взять готовую тему</button>
+      <button class="primary-button" id="saveCustomSpeech" type="button" disabled><span>Продолжить со своей темой</span><span aria-hidden="true">→</span></button>
+    </div>
+  `;
+
+  const input = document.querySelector('#customSpeechText');
+  const count = document.querySelector('#speechCharacterCount');
+  const save = document.querySelector('#saveCustomSpeech');
+  input.value = session.customSpeechMode === 'own' ? session.customSpeechText : '';
+
+  const refresh = () => {
+    const length = input.value.trim().length;
+    count.textContent = `${input.value.length} / 2000`;
+    save.disabled = length < 5;
+  };
+  refresh();
+  input.addEventListener('input', refresh);
+  save.addEventListener('click', () => {
+    session.customSpeechText = input.value.trim();
+    session.customSpeechMode = 'own';
+    saveState();
+    nextStep();
+  });
+  document.querySelector('#useSuggestedSpeech').addEventListener('click', () => {
+    session.customSpeechText = suggested;
+    session.customSpeechMode = 'suggested';
+    saveState();
+    nextStep();
+  });
+  input.focus();
+}
+
+function renderRehearsalReview(card, step) {
+  const session = sessionFor();
+  card.innerHTML = `
+    ${exerciseHeader(step)}
+    <div class="focus-options" role="radiogroup" aria-label="Что улучшить во второй попытке">
+      ${rehearsalFocusOptions.map((option) => `
+        <button class="focus-option${session.rehearsalFocus === option.id ? ' selected' : ''}" type="button" role="radio" aria-checked="${session.rehearsalFocus === option.id}" data-focus="${option.id}">
+          <strong>${escapeHtml(option.label)}</strong>
+          <span>${escapeHtml(option.tip)}</span>
+        </button>
+      `).join('')}
+    </div>
+    <div class="button-stack">
+      <button class="primary-button" id="saveRehearsalFocus" type="button" ${session.rehearsalFocus ? '' : 'disabled'}><span>Перейти ко второй попытке</span><span aria-hidden="true">→</span></button>
+    </div>
+  `;
+
+  const save = document.querySelector('#saveRehearsalFocus');
+  document.querySelectorAll('.focus-option').forEach((button) => {
+    button.addEventListener('click', () => {
+      session.rehearsalFocus = button.dataset.focus;
+      document.querySelectorAll('.focus-option').forEach((item) => {
+        const selected = item === button;
+        item.classList.toggle('selected', selected);
+        item.setAttribute('aria-checked', String(selected));
+      });
+      save.disabled = false;
+      saveState();
+    });
+  });
+  save.addEventListener('click', nextStep);
 }
 
 function renderWarmup(card, step) {
@@ -895,6 +1072,22 @@ function renderRatings(card, step) {
 function finishSession() {
   const day = currentDay();
   const session = sessionFor();
+  const focus = rehearsalFocusOptions.find((item) => item.id === session.rehearsalFocus);
+  const rehearsalRecordings = session.recordings.filter((recording) =>
+    ['d7-rehearsal-1', 'd7-rehearsal-2'].includes(recording.stepId)).length;
+  const completionText = day.id === 7 && session.practiceFormat === 1
+    ? rehearsalRecordings >= 2
+      ? 'Ты выбрала материал, записала две версии одной речи и сократила её до главной мысли. Результат сохранён на этом устройстве.'
+      : 'Ты выбрала материал и прошла весь сценарий репетиции. Сохранённые записи доступны на этом устройстве.'
+    : 'Ты прочитала текст вслух и перенесла навык в самостоятельную речь. Результат сохранён на этом устройстве.';
+  const mainResult = day.id === 7 && session.practiceFormat === 1
+    ? rehearsalRecordings >= 2
+      ? `Ты не просто записала речь, а повторила её с конкретной задачей: ${focus?.label.toLowerCase() || 'сделать следующую попытку яснее'}.`
+      : `Ты выбрала один конкретный фокус для следующей попытки: ${focus?.label.toLowerCase() || 'говорить яснее'}.`
+    : 'Ты закончила мысль, даже если говорила неидеально.';
+  const secondSummaryCard = day.id === 7 && session.practiceFormat === 1
+    ? `<div class="summary-card"><strong>${session.rehearsalFocus ? '1' : '0'}</strong><span>выбранный фокус</span></div>`
+    : `<div class="summary-card"><strong>${session.sprintWords.length}</strong><span>слов в спринте</span></div>`;
   session.completedAt = new Date().toISOString();
   saveState();
   document.querySelector('#skipStep').hidden = true;
@@ -905,14 +1098,14 @@ function finishSession() {
   card.innerHTML = `
     <div class="stage-tag">День ${day.id} готов</div>
     <h2>${day.title}</h2>
-    <p>Ты прочитала текст вслух и перенесла навык в самостоятельную речь. Результат сохранён на этом устройстве.</p>
+    <p>${escapeHtml(completionText)}</p>
     <div class="summary-grid">
       <div class="summary-card"><strong>${session.recordings.length}</strong><span>голосовые записи</span></div>
-      <div class="summary-card"><strong>${session.sprintWords.length}</strong><span>слов в спринте</span></div>
+      ${secondSummaryCard}
       <div class="summary-card"><strong>${session.ratings.thread}/5</strong><span>удерживать нить</span></div>
       <div class="summary-card"><strong>${session.ratings.words}/5</strong><span>находить слова</span></div>
     </div>
-    <div class="rescue-card"><span>Главный результат</span><strong>Ты закончила мысль, даже если говорила неидеально.</strong></div>
+    <div class="rescue-card"><span>Главный результат</span><strong>${escapeHtml(mainResult)}</strong></div>
     <div class="button-stack">
       <button class="primary-button" id="finishHome" type="button"><span>К неделе</span><span aria-hidden="true">→</span></button>
     </div>

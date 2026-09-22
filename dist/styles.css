@@ -360,6 +360,19 @@ h1 {
 }
 .word-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(93, 225, 196, 0.1); }
 .word-count { color: var(--accent); font-weight: 750; margin: 10px 0; }
+.input-label { display: block; margin: 4px 0 9px; font-size: 0.9rem; font-weight: 750; }
+.speech-input { min-height: 150px; }
+.input-meta { display: flex; justify-content: space-between; gap: 14px; margin: 8px 0 16px; color: var(--muted); font-size: 0.76rem; }
+.suggested-topic { padding: 16px 18px; border: 1px solid var(--line); border-radius: 16px; background: rgba(14, 23, 37, 0.72); }
+.suggested-topic span { color: var(--warm); font-size: 0.76rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+.suggested-topic p { margin: 7px 0 0; color: #dce5f2; line-height: 1.48; }
+.user-speech-text { max-height: 220px; overflow-y: auto; white-space: pre-wrap; }
+.focus-options { display: grid; gap: 10px; margin: 4px 0 8px; }
+.focus-option { width: 100%; padding: 15px 17px; display: grid; gap: 5px; text-align: left; border: 1px solid var(--line); border-radius: 16px; background: #0f1827; cursor: pointer; }
+.focus-option strong { font-size: 0.95rem; }
+.focus-option span { color: var(--muted); font-size: 0.84rem; line-height: 1.4; }
+.focus-option.selected { border-color: var(--accent); background: rgba(93, 225, 196, 0.1); }
+.focus-option.selected strong { color: var(--accent); }
 
 .rating-block { margin: 14px 0 24px; }
 .rating-block h3 { margin: 0 0 10px; font-size: 1rem; }
