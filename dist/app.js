@@ -8,7 +8,41 @@ const ratingTemplate = document.querySelector('#ratingTemplate');
 const STORAGE_KEY = 'nit-session-v1';
 const DB_NAME = 'nit-recordings';
 const DB_VERSION = 1;
+const SESSION_FORMAT = 2;
+const PREVIEW_SECONDS = 30;
 const days = window.NIT_WEEK_DAYS || [];
+const readingVariants = window.NIT_READING_VARIANTS || {};
+
+const warmupVariants = [
+  {
+    breath: 'Спокойно вдохни носом. На выдохе мягко тяни «с-с-с», не выжимая воздух до конца.',
+    speech: 'Пять раз чередуй губами «у–и», затем дважды скажи: «Дело мастера боится».',
+  },
+  {
+    breath: 'Опусти плечи. Сделай удобный вдох носом и длинный тихий выдох через слегка сомкнутые губы.',
+    speech: 'Мягко произнеси «м-м-м», затем чётко: «Тише едешь — дальше будешь».',
+  },
+  {
+    breath: 'Вдохни без усилия. На одном спокойном выдохе посчитай от одного до пяти обычным голосом.',
+    speech: 'Трижды произнеси «па–ба–ма», затем: «Семь раз отмерь — один раз отрежь».',
+  },
+  {
+    breath: 'Сделай два спокойных вдоха носом. Каждый выдох отпусти на тихом «ф-ф-ф».',
+    speech: 'Чередуй «ва–фа» в удобном темпе, затем скажи: «Слово не воробей: вылетит — не поймаешь».',
+  },
+  {
+    breath: 'Расслабь челюсть. Вдохни носом и выдохни со свободным тихим вздохом «ха-а».',
+    speech: 'Произнеси «да–та–ла» три раза, затем: «Утро вечера мудренее».',
+  },
+  {
+    breath: 'Вдохни спокойно. На выдохе сделай лёгкую вибрацию губ «бр-р-р» на удобной высоте.',
+    speech: 'Медленно произнеси «тра–дра», затем дважды: «Поспешишь — людей насмешишь».',
+  },
+  {
+    breath: 'Положи ладонь на нижние рёбра. Вдохни свободно, а выдох отпусти на мягком «ш-ш-ш».',
+    speech: 'Чётко произнеси «ми–мэ–ма–мо–му», затем: «Не спеши языком — торопись делом».',
+  },
+];
 
 const goalProfiles = {
   conversation: {
@@ -161,11 +195,14 @@ function freshState() {
     profile: null,
     selectedDay: 1,
     sessions: {},
+    attempts: {},
   };
 }
 
 function freshSession() {
   return {
+    formatVersion: SESSION_FORMAT,
+    contentVariant: null,
     startedAt: null,
     completedAt: null,
     stepIndex: 0,
@@ -179,12 +216,22 @@ function freshSession() {
 function loadState() {
   try {
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-    if (stored.sessions) return { ...freshState(), ...stored };
+    if (stored.sessions) {
+      const loaded = { ...freshState(), ...stored };
+      Object.values(loaded.sessions).forEach((session) => {
+        if (!session.formatVersion && !session.startedAt && !session.completedAt) {
+          session.formatVersion = SESSION_FORMAT;
+          session.contentVariant = null;
+        }
+      });
+      return loaded;
+    }
 
     const migrated = { ...freshState(), profile: stored.profile || null };
     if (stored.startedAt || stored.completedAt || stored.stepIndex || stored.recordings?.length) {
       migrated.sessions['1'] = {
         ...freshSession(),
+        formatVersion: 1,
         startedAt: stored.startedAt || null,
         completedAt: stored.completedAt || null,
         stepIndex: stored.stepIndex || 0,
@@ -224,14 +271,57 @@ function focusMain() {
   requestAnimationFrame(() => app.focus());
 }
 
+function countWords(text) {
+  return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+function readingTag(step, text) {
+  const count = countWords(text);
+  if (/^\d+\s+слов/.test(step.tag)) return `${count} слов`;
+  const label = step.tag.replace(/\s*·\s*\d+\s+слов.*$/, '');
+  return `${label} · ${count} слов`;
+}
+
+function resolveReading(step, day = currentDay(), session = sessionFor(day.id)) {
+  const options = [step.prompt, ...(readingVariants[day.id] || [])];
+  const index = Number(session.contentVariant || 0) % options.length;
+  const prompt = options[index];
+  return { ...step, prompt, tag: readingTag(step, prompt) };
+}
+
+function warmupStep(day, session) {
+  const index = (day.id - 1 + Number(session.contentVariant || 0)) % warmupVariants.length;
+  const variant = warmupVariants[index];
+  return {
+    id: 'warmup',
+    name: 'Разогрев',
+    tag: '40 секунд · без записи',
+    title: 'Разбуди дыхание и речь',
+    description: 'Два мягких упражнения перед основной тренировкой.',
+    rescue: 'Делай без усилия. Если появляется боль или неприятное ощущение — пропусти разогрев.',
+    warmup: true,
+    parts: [
+      { label: 'Дыхание и голос', instruction: variant.breath, duration: 20 },
+      { label: 'Губы и дикция', instruction: variant.speech, duration: 20 },
+    ],
+  };
+}
+
+function stepsForSession(day = currentDay(), session = sessionFor(day.id)) {
+  if (session.formatVersion !== SESSION_FORMAT) return day.steps;
+  return [warmupStep(day, session), ...day.steps];
+}
+
 function resolveStep(step) {
   const profile = goalProfiles[state.profile] || goalProfiles.conversation;
   const tailoredPrompt = step.profilePrompts?.[state.profile];
-  const tailored = tailoredPrompt ? { ...step, prompt: tailoredPrompt } : step;
+  let tailored = tailoredPrompt ? { ...step, prompt: tailoredPrompt } : step;
   if (tailored.reuseReading) {
     const readingStep = currentDay().steps.find((item) => item.reading);
-    return { ...tailored, prompt: readingStep?.prompt || tailored.prompt, reading: true };
+    const resolvedReading = readingStep ? resolveReading(readingStep) : null;
+    return { ...tailored, prompt: resolvedReading?.prompt || tailored.prompt, reading: true };
   }
+  if (tailored.reading) tailored = resolveReading(tailored);
   if (tailored.id === 'baseline') {
     return { ...tailored, title: profile.baselineTitle, prompt: profile.baselinePrompt };
   }
@@ -256,6 +346,7 @@ function renderOnboarding() {
   stopTimer();
   stopStream();
   clearPlayback();
+  currentPhase = 'idle';
   app.replaceChildren(onboardingTemplate.content.cloneNode(true));
   const save = document.querySelector('#saveGoal');
   const warning = document.querySelector('#changeWarning');
@@ -299,6 +390,7 @@ function renderWeek() {
   stopTimer();
   stopStream();
   clearPlayback();
+  currentPhase = 'idle';
   app.replaceChildren(weekTemplate.content.cloneNode(true));
 
   const completedDays = days.filter((day) => state.sessions[String(day.id)]?.completedAt).length;
@@ -375,6 +467,7 @@ function renderHome() {
   stopTimer();
   stopStream();
   clearPlayback();
+  currentPhase = 'idle';
   app.replaceChildren(homeTemplate.content.cloneNode(true));
   const day = currentDay();
   const session = sessionFor();
@@ -383,13 +476,14 @@ function renderHome() {
   const changeGoal = document.querySelector('#changeGoal');
   const hasProgress = session.startedAt && !session.completedAt;
   const completed = Boolean(session.completedAt);
+  const sessionSteps = stepsForSession(day, session);
 
   document.querySelector('#backWeek').addEventListener('click', renderWeek);
   document.querySelector('#dayEyebrow').textContent = `День ${day.id} · ${day.focus}`;
   document.querySelector('#homeTitle').textContent = day.title;
   document.querySelector('#dayLead').textContent = day.lead;
   document.querySelector('#dayMinutes').textContent = day.minutes;
-  document.querySelector('#dayExerciseCount').textContent = day.steps.filter((step) => !step.rating).length;
+  document.querySelector('#dayExerciseCount').textContent = sessionSteps.filter((step) => !step.rating).length;
   document.querySelector('#dayRecordingCount').textContent = day.steps.filter((step) => step.record).length;
 
   changeGoal.textContent = `Цель: ${goalProfiles[state.profile].label} · изменить`;
@@ -401,7 +495,7 @@ function renderHome() {
     resumeNote.hidden = false;
     resumeNote.textContent = session.stepIndex === 0
       ? 'Тренировка начата'
-      : `Пройдено: ${session.stepIndex} из ${day.steps.length} этапов`;
+      : `Пройдено: ${session.stepIndex} из ${sessionSteps.length} этапов`;
   }
 
   if (completed) {
@@ -411,13 +505,16 @@ function renderHome() {
   }
 
   start.addEventListener('click', () => {
+    const dayKey = String(day.id);
     if (completed) {
-      state.sessions[String(day.id)] = {
+      state.attempts[dayKey] = Number(state.attempts[dayKey] || 0) + 1;
+      state.sessions[dayKey] = {
         ...freshSession(),
         recordings: [...session.recordings],
       };
     }
     const activeSession = sessionFor(day.id);
+    activeSession.contentVariant ??= Number(state.attempts[dayKey] || 0);
     activeSession.startedAt ||= new Date().toISOString();
     saveState();
     renderSession();
@@ -428,14 +525,16 @@ function renderHome() {
 function renderSession() {
   stopTimer();
   clearPlayback();
+  currentPhase = 'idle';
   app.replaceChildren(sessionTemplate.content.cloneNode(true));
 
   const day = currentDay();
   const session = sessionFor();
-  const step = resolveStep(day.steps[session.stepIndex]);
-  document.querySelector('#stepLabel').textContent = `День ${day.id} · этап ${session.stepIndex + 1} из ${day.steps.length}`;
+  const sessionSteps = stepsForSession(day, session);
+  const step = resolveStep(sessionSteps[session.stepIndex]);
+  document.querySelector('#stepLabel').textContent = `День ${day.id} · этап ${session.stepIndex + 1} из ${sessionSteps.length}`;
   document.querySelector('#stepName').textContent = step.name;
-  document.querySelector('#progressBar').style.width = `${((session.stepIndex + 1) / day.steps.length) * 100}%`;
+  document.querySelector('#progressBar').style.width = `${((session.stepIndex + 1) / sessionSteps.length) * 100}%`;
   document.querySelector('#backHome').addEventListener('click', renderHome);
   const skip = document.querySelector('#skipStep');
   skip.hidden = Boolean(step.rating);
@@ -448,6 +547,7 @@ function renderSession() {
 
   const card = document.querySelector('#exerciseCard');
   if (step.rating) renderRatings(card, step);
+  else if (step.warmup) renderWarmup(card, step);
   else if (step.sprint) renderSprint(card, step);
   else renderRecording(card, step);
   focusMain();
@@ -463,6 +563,48 @@ function exerciseHeader(step) {
     ${step.anchors ? `<div class="anchors">${step.anchors.map((item) => `<span>${item}</span>`).join('')}</div>` : ''}
     ${step.rescue ? `<p class="status-message">${step.rescue}</p>` : ''}
   `;
+}
+
+function renderWarmup(card, step) {
+  const total = step.parts.reduce((sum, part) => sum + part.duration, 0);
+  card.innerHTML = `
+    ${exerciseHeader(step)}
+    <div class="warmup-list">
+      ${step.parts.map((part, index) => `
+        <div class="warmup-item">
+          <span>${index + 1}</span>
+          <div><strong>${part.label}</strong><p>${part.instruction}</p></div>
+        </div>
+      `).join('')}
+    </div>
+    <div class="timer-zone">
+      <div class="timer" id="timer">${formatTime(total)}</div>
+      <div class="timer-caption" id="timerCaption">Два упражнения · ${total} сек</div>
+      <button class="primary-button" id="warmupAction" type="button"><span>Начать разогрев</span><span aria-hidden="true">→</span></button>
+      <div class="status-message" id="warmupStatus">Запись не включается</div>
+    </div>
+  `;
+
+  const action = document.querySelector('#warmupAction');
+  const status = document.querySelector('#warmupStatus');
+  action.addEventListener('click', async () => {
+    action.disabled = true;
+    currentPhase = 'warmup';
+    for (const part of step.parts) {
+      status.textContent = part.instruction;
+      const completed = await runCountdown(part.duration, part.label, false);
+      if (!completed) return;
+    }
+    currentPhase = 'done';
+    action.remove();
+    document.querySelector('#timerCaption').textContent = 'Разогрев завершён';
+    status.textContent = 'Готово. Переходи к основной тренировке.';
+    const buttons = document.createElement('div');
+    buttons.className = 'button-stack warmup-continue';
+    buttons.innerHTML = '<button class="primary-button" id="continueAfterWarmup" type="button"><span>Продолжить</span><span aria-hidden="true">→</span></button>';
+    document.querySelector('.timer-zone').append(buttons);
+    document.querySelector('#continueAfterWarmup').addEventListener('click', nextStep);
+  });
 }
 
 function renderRecording(card, step) {
@@ -568,7 +710,7 @@ async function finishRecording() {
   stopTimer();
   const day = currentDay();
   const session = sessionFor();
-  const step = resolveStep(day.steps[session.stepIndex]);
+  const step = resolveStep(stepsForSession(day, session)[session.stepIndex]);
   const action = document.querySelector('#recordAction');
   const status = document.querySelector('#recordStatus');
   const card = document.querySelector('#exerciseCard');
@@ -603,7 +745,7 @@ async function finishRecording() {
   const buttons = document.createElement('div');
   buttons.className = 'button-stack';
   buttons.innerHTML = `
-    ${savedBlob ? '<button class="secondary-button" id="previewRecording" type="button">Прослушать первые 10 секунд · необязательно</button>' : ''}
+    ${savedBlob ? `<button class="secondary-button" id="previewRecording" type="button">Прослушать до ${PREVIEW_SECONDS} секунд · необязательно</button>` : ''}
     ${savedBlob ? '<button class="secondary-button" id="downloadRecording" type="button">Скачать запись</button>' : ''}
     <button class="secondary-button" id="repeatRecording" type="button">Записать ещё раз</button>
     <button class="primary-button" id="continueAfterRecording" type="button"><span>Продолжить без прослушивания</span><span aria-hidden="true">→</span></button>
@@ -625,11 +767,16 @@ async function finishRecording() {
     playbackUrl = URL.createObjectURL(savedBlob);
     const preview = document.querySelector('#previewRecording');
     playbackAudio = new Audio(playbackUrl);
+    playbackAudio.addEventListener('ended', () => {
+      clearTimeout(playbackTimer);
+      preview.textContent = `Прослушать до ${PREVIEW_SECONDS} секунд ещё раз`;
+      status.textContent = 'Запись закончилась. Проверь только, понятна ли мысль.';
+    });
     preview.addEventListener('click', async () => {
       if (!playbackAudio.paused) {
         playbackAudio.pause();
         clearTimeout(playbackTimer);
-        preview.textContent = 'Прослушать первые 10 секунд · необязательно';
+        preview.textContent = `Прослушать до ${PREVIEW_SECONDS} секунд · необязательно`;
         status.textContent = 'Прослушивание остановлено. Можно сразу продолжить.';
         return;
       }
@@ -637,12 +784,12 @@ async function finishRecording() {
       try {
         await playbackAudio.play();
         preview.textContent = 'Остановить прослушивание';
-        status.textContent = 'Звучат первые 10 секунд. Остановить можно в любой момент.';
+        status.textContent = `Звучит запись — не дольше ${PREVIEW_SECONDS} секунд. Остановить можно в любой момент.`;
         playbackTimer = setTimeout(() => {
           playbackAudio.pause();
-          preview.textContent = 'Прослушать первые 10 секунд ещё раз';
+          preview.textContent = `Прослушать первые ${PREVIEW_SECONDS} секунд ещё раз`;
           status.textContent = 'Готово. Не оценивай голос — проверь только, понятна ли мысль.';
-        }, 10000);
+        }, PREVIEW_SECONDS * 1000);
       } catch {
         status.textContent = 'Не удалось включить запись. Можно продолжить без прослушивания.';
       }
@@ -779,7 +926,8 @@ function nextStep() {
   currentPhase = 'idle';
   const day = currentDay();
   const session = sessionFor();
-  session.stepIndex = Math.min(session.stepIndex + 1, day.steps.length - 1);
+  const sessionSteps = stepsForSession(day, session);
+  session.stepIndex = Math.min(session.stepIndex + 1, sessionSteps.length - 1);
   saveState();
   renderSession();
 }

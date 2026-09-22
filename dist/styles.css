@@ -329,6 +329,12 @@ h1 {
 }
 .learning-card strong { color: var(--warm); font-size: 0.88rem; }
 .learning-card span { color: #d8e0eb; font-size: 0.91rem; line-height: 1.45; }
+.warmup-list { display: grid; gap: 10px; margin: 2px 0 14px; }
+.warmup-item { display: grid; grid-template-columns: 32px 1fr; gap: 12px; align-items: start; padding: 14px; border: 1px solid var(--line); border-radius: 16px; background: rgba(14, 23, 37, 0.72); }
+.warmup-item > span { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; background: rgba(93, 225, 196, 0.12); color: var(--accent); font-weight: 800; }
+.warmup-item strong { font-size: 0.9rem; }
+.warmup-item p { margin: 5px 0 0; color: var(--muted); font-size: 0.88rem; line-height: 1.45; }
+.warmup-continue { width: 100%; padding-top: 0; }
 .anchors { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 22px; }
 .anchors span { padding: 8px 11px; border-radius: 999px; background: #202e43; color: #dce5f2; font-size: 0.86rem; }
 .timer-zone { margin-top: auto; display: grid; place-items: center; gap: 18px; padding-top: 18px; }
