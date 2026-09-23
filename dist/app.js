@@ -841,7 +841,15 @@ async function startResponse(step, canRecord) {
 
   if (canRecord && mediaStream) {
     chunks = [];
-    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : '';
+    const mimeTypes = [
+      'audio/mp4;codecs=mp4a.40.2',
+      'audio/mp4',
+      'audio/webm;codecs=opus',
+      'audio/webm',
+    ];
+    const mimeType = typeof MediaRecorder.isTypeSupported === 'function'
+      ? mimeTypes.find((type) => MediaRecorder.isTypeSupported(type)) || ''
+      : '';
     mediaRecorder = new MediaRecorder(mediaStream, mimeType ? { mimeType } : undefined);
     mediaRecorder.addEventListener('dataavailable', (event) => {
       if (event.data.size) chunks.push(event.data);
@@ -923,7 +931,7 @@ async function finishRecording() {
   buttons.className = 'button-stack';
   buttons.innerHTML = `
     ${savedBlob ? `<button class="secondary-button" id="previewRecording" type="button">Прослушать до ${PREVIEW_SECONDS} секунд · необязательно</button>` : ''}
-    ${savedBlob ? '<button class="secondary-button" id="downloadRecording" type="button">Скачать запись</button>' : ''}
+    ${savedBlob ? '<button class="secondary-button" id="downloadRecording" type="button">Скачать для телефона (.wav)</button>' : ''}
     <button class="secondary-button" id="repeatRecording" type="button">Записать ещё раз</button>
     <button class="primary-button" id="continueAfterRecording" type="button"><span>Продолжить без прослушивания</span><span aria-hidden="true">→</span></button>
   `;
@@ -936,9 +944,15 @@ async function finishRecording() {
   });
 
   if (savedBlob) {
-    document.querySelector('#downloadRecording').addEventListener('click', () => {
-      downloadBlob(savedBlob, savedMetadata);
-      status.textContent = 'Запись скачана на устройство.';
+    const download = document.querySelector('#downloadRecording');
+    download.addEventListener('click', async () => {
+      download.disabled = true;
+      status.textContent = 'Готовим совместимый WAV-файл…';
+      const result = await downloadBlob(savedBlob, savedMetadata);
+      status.textContent = result.extension === 'wav'
+        ? 'WAV-файл скачан. Он подходит для прослушивания на iPhone и компьютере.'
+        : `Не удалось преобразовать запись. Скачан исходный файл .${result.extension}.`;
+      download.disabled = false;
     });
     clearPlayback();
     playbackUrl = URL.createObjectURL(savedBlob);
@@ -1228,18 +1242,82 @@ function audioExtension(blob) {
   return 'webm';
 }
 
-function downloadBlob(blob, metadata = {}) {
+function audioBufferToWav(audioBuffer) {
+  const sampleRate = Math.min(24000, audioBuffer.sampleRate);
+  const sampleCount = Math.ceil(audioBuffer.duration * sampleRate);
+  const bytesPerSample = 2;
+  const buffer = new ArrayBuffer(44 + sampleCount * bytesPerSample);
+  const view = new DataView(buffer);
+  const writeText = (offset, text) => {
+    for (let index = 0; index < text.length; index += 1) view.setUint8(offset + index, text.charCodeAt(index));
+  };
+
+  writeText(0, 'RIFF');
+  view.setUint32(4, 36 + sampleCount * bytesPerSample, true);
+  writeText(8, 'WAVE');
+  writeText(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * bytesPerSample, true);
+  view.setUint16(32, bytesPerSample, true);
+  view.setUint16(34, 16, true);
+  writeText(36, 'data');
+  view.setUint32(40, sampleCount * bytesPerSample, true);
+
+  const channels = Array.from(
+    { length: audioBuffer.numberOfChannels },
+    (_, channel) => audioBuffer.getChannelData(channel),
+  );
+  const ratio = audioBuffer.sampleRate / sampleRate;
+  let offset = 44;
+  for (let index = 0; index < sampleCount; index += 1) {
+    const sourceIndex = Math.min(Math.floor(index * ratio), audioBuffer.length - 1);
+    const sample = channels.reduce((sum, channel) => sum + channel[sourceIndex], 0) / channels.length;
+    const clamped = Math.max(-1, Math.min(1, sample));
+    view.setInt16(offset, clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff, true);
+    offset += bytesPerSample;
+  }
+  return new Blob([buffer], { type: 'audio/wav' });
+}
+
+async function convertToWav(blob) {
+  const Context = window.AudioContext || window.webkitAudioContext;
+  if (!Context) throw new Error('AudioContext is unavailable');
+  const context = new Context();
+  try {
+    const source = await blob.arrayBuffer();
+    const decoded = await context.decodeAudioData(source.slice(0));
+    return audioBufferToWav(decoded);
+  } finally {
+    await context.close().catch(() => {});
+  }
+}
+
+async function downloadBlob(blob, metadata = {}) {
   const dayId = metadata.dayId || state.selectedDay;
   const stepId = metadata.stepId || 'recording';
   const date = String(metadata.createdAt || new Date().toISOString()).slice(0, 10);
-  const url = URL.createObjectURL(blob);
+  let exportBlob = blob;
+  let extension = audioExtension(blob);
+  if (extension !== 'wav') {
+    try {
+      exportBlob = await convertToWav(blob);
+      extension = 'wav';
+    } catch {
+      // Если браузер не умеет декодировать исходную запись, сохраняем её без потери данных.
+    }
+  }
+  const url = URL.createObjectURL(exportBlob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `nit-day-${dayId}-${stepId}-${date}.${audioExtension(blob)}`;
+  link.download = `nit-day-${dayId}-${stepId}-${date}.${extension}`;
   document.body.append(link);
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return { extension };
 }
 
 function renderSavedRecordings(day, session) {
@@ -1250,19 +1328,21 @@ function renderSavedRecordings(day, session) {
 
   section.hidden = false;
   session.recordings.forEach((recording, index) => {
-    const step = day.steps.find((item) => item.id === recording.stepId);
+    const step = stepsForSession(day, session).find((item) => item.id === recording.stepId);
     const button = document.createElement('button');
     button.className = 'secondary-button recording-download';
     button.type = 'button';
-    button.textContent = `Скачать ${index + 1} · ${step?.name || 'Запись'}`;
+    button.textContent = `Скачать WAV ${index + 1} · ${step?.name || 'Запись'}`;
     button.addEventListener('click', async () => {
       button.disabled = true;
       status.textContent = 'Готовим файл…';
       try {
         const saved = await getRecording(recording.id);
         if (!saved?.blob) throw new Error('Recording not found');
-        downloadBlob(saved.blob, saved);
-        status.textContent = 'Запись скачана на устройство.';
+        const result = await downloadBlob(saved.blob, saved);
+        status.textContent = result.extension === 'wav'
+          ? 'WAV-файл скачан. Он подходит для прослушивания на iPhone и компьютере.'
+          : `Не удалось преобразовать запись. Скачан исходный файл .${result.extension}.`;
       } catch {
         status.textContent = 'Не удалось найти запись в этом браузере.';
       } finally {
