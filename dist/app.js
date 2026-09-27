@@ -668,6 +668,7 @@ function renderHome() {
   changeGoal.textContent = `Цель: ${goalProfiles[state.profile].label} · изменить`;
   changeGoal.addEventListener('click', renderOnboarding);
   renderSavedRecordings(day, session);
+  renderSavedSprint(day, session);
 
   if (hasProgress) {
     start.querySelector('span').textContent = 'Продолжить тренировку';
@@ -1146,6 +1147,12 @@ function examplesForSprint(step) {
   return null;
 }
 
+function sprintExamplesMarkup(examples) {
+  return `<ul class="sprint-examples">${examples.map(([before, after]) => `
+    <li><span>${escapeHtml(before)}</span><strong>→ ${escapeHtml(after)}</strong></li>
+  `).join('')}</ul>`;
+}
+
 function renderSprintReview(card, step, words) {
   const examples = examplesForSprint(step);
   card.innerHTML = `
@@ -1153,9 +1160,7 @@ function renderSprintReview(card, step, words) {
     <h2>Сравни с примерами</h2>
     <p>Для «сделать» нет одной замены: точный глагол зависит от действия.</p>
     <div class="learning-card"><strong>Твои слова · ${words.length}</strong><span class="sprint-review-words">${escapeHtml(words.join(', '))}</span></div>
-    <ul class="sprint-examples">
-      ${examples.map(([before, after]) => `<li><span>${escapeHtml(before)}</span><strong>→ ${escapeHtml(after)}</strong></li>`).join('')}
-    </ul>
+    ${sprintExamplesMarkup(examples)}
     <p>Это не полный список и не проверка: приложение пока не оценивает смысл слов. Выбери одно новое сочетание и произнеси с ним фразу вслух.</p>
     <div class="button-stack">
       <button class="primary-button" id="continueAfterSprint" type="button"><span>Продолжить</span><span aria-hidden="true">→</span></button>
@@ -1493,6 +1498,19 @@ function renderSavedRecordings(day, session) {
     });
     list.append(button);
   });
+}
+
+function renderSavedSprint(day, session) {
+  const step = day.steps.find((item) => item.sprint);
+  const examples = step && examplesForSprint(step);
+  if (!examples || !session.sprintWords?.length) return;
+
+  document.querySelector('#savedSprint').hidden = false;
+  document.querySelector('#savedSprintWords').textContent = session.sprintWords.join(', ');
+  document.querySelector('#savedSprintExamples').innerHTML = `
+    ${sprintExamplesMarkup(examples)}
+    <p>Это не проверка правильности. Попробуй вспомнить одно из этих сочетаний в разговоре.</p>
+  `;
 }
 
 document.querySelector('#soundToggle').addEventListener('click', (event) => {
