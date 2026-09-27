@@ -844,6 +844,12 @@ function renderRecording(card, step) {
     </div>
   `;
 
+  if (step.reading || step.userText) {
+    card.classList.add('long-text-exercise');
+    const text = card.querySelector('.prompt-box');
+    if (text) card.append(text);
+  }
+
   const action = document.querySelector('#recordAction');
   action.addEventListener('click', async () => {
     if (currentPhase === 'recording') {
@@ -981,7 +987,9 @@ async function finishRecording() {
     <button class="secondary-button" id="repeatRecording" type="button">Записать ещё раз</button>
     <button class="primary-button" id="continueAfterRecording" type="button"><span>Продолжить без прослушивания</span><span aria-hidden="true">→</span></button>
   `;
-  document.querySelector('.timer-zone').append(buttons);
+  const timerZone = document.querySelector('.timer-zone');
+  timerZone.append(buttons);
+  if (card.classList.contains('long-text-exercise')) card.append(timerZone);
   document.querySelector('#continueAfterRecording').addEventListener('click', nextStep);
   document.querySelector('#repeatRecording').addEventListener('click', () => {
     clearPlayback();
