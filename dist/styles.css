@@ -350,6 +350,9 @@ h1 {
 .anchors { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 22px; }
 .anchors span { padding: 8px 11px; border-radius: 999px; background: #202e43; color: #dce5f2; font-size: 0.86rem; }
 .timer-zone { margin-top: auto; display: grid; place-items: center; gap: 18px; padding-top: 18px; }
+.guided-shorten .timer-zone { margin-top: 0; gap: 10px; padding-top: 6px; }
+.guided-shorten .timer { font-size: clamp(3rem, 12vw, 4.5rem); }
+.guided-shorten .anchors { margin-bottom: 8px; }
 .long-text-exercise .timer-zone { margin-top: 0; gap: 10px; padding-top: 0; }
 .long-text-exercise .timer { font-size: clamp(3rem, 12vw, 4.5rem); }
 .long-text-exercise .prompt-box { margin: 18px 0 0; }
