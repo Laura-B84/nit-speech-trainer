@@ -14,7 +14,7 @@
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23101725'/%3E%3Cpath d='M15 42c9-22 25-22 34 0M18 24c8 7 20 7 28 0' fill='none' stroke='%235de1c4' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E"
     />
     <title>Нить — тренажёр речи</title>
-    <link rel="stylesheet" href="./styles.css?v=20260923-3" />
+    <link rel="stylesheet" href="./styles.css?v=20260927-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -90,6 +90,12 @@
           </div>
         </div>
         <button class="goal-chip" id="weekChangeGoal" type="button"></button>
+        <section class="motivation-card" aria-labelledby="motivationTitle">
+          <span class="motivation-kicker">Твоя практика</span>
+          <h2 id="motivationTitle"></h2>
+          <p id="motivationMessage"></p>
+          <p class="motivation-next" id="motivationNext"></p>
+        </section>
         <div class="day-list" id="dayList"></div>
         <div class="reset-zone">
           <button class="text-button reset-trigger" id="resetProgress" type="button">Сбросить прогресс</button>
@@ -168,8 +174,8 @@
       </div>
     </template>
 
-    <script src="./reading-variants.js?v=20260923-3" defer></script>
-    <script src="./week-data.js?v=20260923-3" defer></script>
-    <script src="./app.js?v=20260923-3" defer></script>
+    <script src="./reading-variants.js?v=20260927-1" defer></script>
+    <script src="./week-data.js?v=20260927-1" defer></script>
+    <script src="./app.js?v=20260927-1" defer></script>
   </body>
 </html>

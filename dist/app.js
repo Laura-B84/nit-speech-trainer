@@ -285,6 +285,51 @@ function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
+function recordingsThisSession(session) {
+  const startedAt = Date.parse(session.startedAt || '') || 0;
+  return session.recordings.filter((recording) => (Date.parse(recording.createdAt || '') || 0) >= startedAt);
+}
+
+function recordingForm(number) {
+  if (number % 10 === 1 && number % 100 !== 11) return 'запись';
+  if ([2, 3, 4].includes(number % 10) && ![12, 13, 14].includes(number % 100)) return 'записи';
+  return 'записей';
+}
+
+function renderWeekMotivation(completedDays) {
+  const title = document.querySelector('#motivationTitle');
+  const message = document.querySelector('#motivationMessage');
+  const next = document.querySelector('#motivationNext');
+  const activeDay = days.find((day) => {
+    const session = state.sessions[String(day.id)];
+    return session?.startedAt && !session.completedAt;
+  });
+  const nextDay = days.find((day) => !state.sessions[String(day.id)]?.completedAt);
+  const latestDay = days
+    .filter((day) => state.sessions[String(day.id)]?.completedAt)
+    .sort((first, second) => Date.parse(state.sessions[String(second.id)].completedAt) - Date.parse(state.sessions[String(first.id)].completedAt))[0];
+
+  if (activeDay) {
+    title.textContent = 'Ты уже начала';
+    message.textContent = `День ${activeDay.id} сохранён. Можно продолжить с того места, где ты остановилась.`;
+    next.textContent = `Следующий шаг: открой «${activeDay.title}».`;
+  } else if (completedDays === days.length) {
+    title.textContent = 'Первая неделя пройдена';
+    message.textContent = 'Ты завершила все семь занятий. Теперь можно выбрать день, к которому хочется вернуться.';
+    next.textContent = 'При повторе тебя ждут другой текст и разогрев.';
+  } else if (latestDay) {
+    const session = state.sessions[String(latestDay.id)];
+    const isToday = new Date(session.completedAt).toDateString() === new Date().toDateString();
+    title.textContent = isToday ? 'Сегодня ты позанималась' : 'Ты уже начала практику';
+    message.textContent = `День ${latestDay.id} «${latestDay.title}» завершён. У тебя готово ${completedDays} из ${days.length} занятий.`;
+    next.textContent = `Когда будешь готова, открой День ${nextDay.id} «${nextDay.title}».`;
+  } else {
+    title.textContent = 'Начни с одного занятия';
+    message.textContent = 'Несколько минут практики — уже конкретный шаг. Говори так, как получается сейчас.';
+    next.textContent = 'Первый шаг: открой День 1 «Не потеряй мысль».';
+  }
+}
+
 function formatTime(total) {
   const minutes = Math.floor(total / 60);
   const seconds = total % 60;
@@ -486,6 +531,7 @@ function renderWeek() {
 
   const completedDays = days.filter((day) => state.sessions[String(day.id)]?.completedAt).length;
   document.querySelector('#weekProgressValue').textContent = `${completedDays}/${days.length}`;
+  renderWeekMotivation(completedDays);
 
   const changeGoal = document.querySelector('#weekChangeGoal');
   changeGoal.textContent = `Цель: ${goalProfiles[state.profile].label} · изменить`;
@@ -1087,18 +1133,29 @@ function finishSession() {
   const day = currentDay();
   const session = sessionFor();
   const focus = rehearsalFocusOptions.find((item) => item.id === session.rehearsalFocus);
-  const rehearsalRecordings = session.recordings.filter((recording) =>
-    ['d7-rehearsal-1', 'd7-rehearsal-2'].includes(recording.stepId)).length;
+  const attemptRecordings = recordingsThisSession(session);
+  const rehearsalRecordings = new Set(attemptRecordings
+    .filter((recording) => ['d7-rehearsal-1', 'd7-rehearsal-2'].includes(recording.stepId))
+    .map((recording) => recording.stepId)).size;
+  const recordedSteps = attemptRecordings
+    .map((recording) => stepsForSession(day, session).find((step) => step.id === recording.stepId))
+    .filter(Boolean);
+  const spokenSteps = recordedSteps.filter((step) => !step.reading);
+  const latestRecordedStep = spokenSteps[spokenSteps.length - 1] || recordedSteps[recordedSteps.length - 1];
   const completionText = day.id === 7 && session.practiceFormat === 1
     ? rehearsalRecordings >= 2
-      ? 'Ты выбрала материал, записала две версии одной речи и сократила её до главной мысли. Результат сохранён на этом устройстве.'
-      : 'Ты выбрала материал и прошла весь сценарий репетиции. Сохранённые записи доступны на этом устройстве.'
-    : 'Ты прочитала текст вслух и перенесла навык в самостоятельную речь. Результат сохранён на этом устройстве.';
+      ? 'Ты выбрала материал и записала две версии одной речи. Записи сохранены на этом устройстве.'
+      : 'Ты прошла сценарий репетиции и отметила, как далась речь. Если запись получилась, она доступна на этом устройстве.'
+    : attemptRecordings.length
+      ? `Ты завершила занятие и сохранила ${attemptRecordings.length} ${recordingForm(attemptRecordings.length)}. Хорошая работа!`
+      : 'Ты завершила занятие и отметила свои ощущения. Это отправная точка для следующей попытки.';
   const mainResult = day.id === 7 && session.practiceFormat === 1
     ? rehearsalRecordings >= 2
-      ? `Ты не просто записала речь, а повторила её с конкретной задачей: ${focus?.label.toLowerCase() || 'сделать следующую попытку яснее'}.`
-      : `Ты выбрала один конкретный фокус для следующей попытки: ${focus?.label.toLowerCase() || 'говорить яснее'}.`
-    : 'Ты закончила мысль, даже если говорила неидеально.';
+      ? `Ты повторила речь с конкретной задачей: ${focus?.label.toLowerCase() || 'сделать следующую попытку яснее'}. Это настоящая практика.`
+      : `Ты выбрала один фокус для дальнейшей тренировки: ${focus?.label.toLowerCase() || 'говорить яснее'}.`
+    : latestRecordedStep
+      ? `Ты сделала запись в упражнении «${latestRecordedStep.name}». К этой попытке можно вернуться и заметить, что уже получается.`
+      : 'Ты дошла до самооценки. В следующий раз попробуй добавить голосовую запись, чтобы услышать свою речь.';
   const secondSummaryCard = day.id === 7 && session.practiceFormat === 1
     ? `<div class="summary-card"><strong>${session.rehearsalFocus ? '1' : '0'}</strong><span>выбранный фокус</span></div>`
     : `<div class="summary-card"><strong>${session.sprintWords.length}</strong><span>слов в спринте</span></div>`;
@@ -1114,7 +1171,7 @@ function finishSession() {
     <h2>${day.title}</h2>
     <p>${escapeHtml(completionText)}</p>
     <div class="summary-grid">
-      <div class="summary-card"><strong>${session.recordings.length}</strong><span>голосовые записи</span></div>
+      <div class="summary-card"><strong>${attemptRecordings.length}</strong><span>голосовые записи в этом занятии</span></div>
       ${secondSummaryCard}
       <div class="summary-card"><strong>${session.ratings.thread}/5</strong><span>удерживать нить</span></div>
       <div class="summary-card"><strong>${session.ratings.words}/5</strong><span>находить слова</span></div>
