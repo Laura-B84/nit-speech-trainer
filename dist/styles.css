@@ -368,6 +368,11 @@ h1 {
 }
 .word-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(93, 225, 196, 0.1); }
 .word-count { color: var(--accent); font-weight: 750; margin: 10px 0; }
+.sprint-examples { list-style: none; padding: 0; margin: 0 0 18px; display: grid; gap: 9px; }
+.sprint-examples li { display: grid; gap: 4px; padding: 13px 16px; border: 1px solid var(--line); border-radius: 14px; background: rgba(14, 23, 37, 0.72); }
+.sprint-examples span { color: var(--muted); }
+.sprint-examples strong { color: var(--accent); font-weight: 750; }
+.sprint-review-words { overflow-wrap: anywhere; }
 .input-label { display: block; margin: 4px 0 9px; font-size: 0.9rem; font-weight: 750; }
 .speech-input { min-height: 150px; }
 .input-meta { display: flex; justify-content: space-between; gap: 14px; margin: 8px 0 16px; color: var(--muted); font-size: 0.76rem; }

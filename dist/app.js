@@ -29,6 +29,46 @@ const rehearsalSuggestions = {
   creator: 'Расскажи идею будущего видео или публикации и объясни, чем она полезна аудитории.',
 };
 
+const sprintExamplesByProfile = {
+  conversation: [
+    ['сделать подарок', 'подготовить подарок'],
+    ['сделать ужин', 'приготовить ужин'],
+    ['сделать выбор', 'выбрать'],
+    ['сделать вывод', 'сформулировать вывод'],
+  ],
+  words: [
+    ['сделать выбор', 'выбрать'],
+    ['сделать проект', 'разработать проект'],
+    ['сделать упражнение', 'выполнить упражнение'],
+    ['сделать вывод', 'сформулировать вывод'],
+  ],
+  speaker: [
+    ['сделать ассистента', 'создать ассистента'],
+    ['сделать программу', 'разработать программу'],
+    ['сделать упражнение', 'подготовить упражнение'],
+    ['сделать вывод', 'сформулировать вывод'],
+  ],
+  work: [
+    ['сделать отчёт', 'подготовить отчёт'],
+    ['сделать проект', 'разработать проект'],
+    ['сделать встречу', 'провести встречу'],
+    ['сделать вывод', 'сформулировать вывод'],
+  ],
+  creator: [
+    ['сделать видео', 'снять видео'],
+    ['сделать пост', 'написать пост'],
+    ['сделать кадр', 'снять кадр'],
+    ['сделать вывод', 'сформулировать вывод'],
+  ],
+};
+
+const dayTwoSprintExamples = [
+  ['сделать звонок', 'позвонить'],
+  ['сделать заметку', 'записать мысль'],
+  ['сделать паузу', 'помолчать'],
+  ['сделать ошибку', 'ошибиться'],
+];
+
 const warmupVariants = [
   {
     breath: 'Спокойно вдохни носом. На выдохе мягко тяни «с-с-с», не выжимая воздух до конца.',
@@ -224,6 +264,7 @@ function freshSession() {
     stepIndex: 0,
     recordings: [],
     sprintWords: [],
+    sprintReviewStepId: null,
     ratings: { thread: null, words: null },
     skipped: [],
     practiceFormat: 1,
@@ -245,6 +286,7 @@ function loadState() {
         }
         if (!session.startedAt && !session.completedAt) session.practiceFormat ??= 1;
         session.customSpeechText ??= '';
+        session.sprintReviewStepId ??= null;
         session.customSpeechMode ??= null;
         session.rehearsalFocus ??= null;
       });
@@ -687,6 +729,7 @@ function renderSession() {
   else if (step.warmup) renderWarmup(card, step);
   else if (step.speechSetup) renderSpeechSetup(card, step);
   else if (step.rehearsalReview) renderRehearsalReview(card, step);
+  else if (step.sprint && session.sprintReviewStepId === step.id) renderSprintReview(card, step, session.sprintWords);
   else if (step.sprint) renderSprint(card, step);
   else renderRecording(card, step);
   focusMain();
@@ -1066,13 +1109,15 @@ function renderSprint(card, step) {
 }
 
 function renderSprintInput(card, step) {
+  const examples = examplesForSprint(step);
+  const isVerbSprint = step.id !== 'd7-sprint';
   card.innerHTML = `
     ${exerciseHeader(step)}
-    <label for="sprintWords">Запиши глаголы через запятую</label>
-    <textarea class="word-input" id="sprintWords" placeholder="создать, разработать…"></textarea>
+    <label for="sprintWords">Запиши ${isVerbSprint ? 'глаголы' : 'слова'} через запятую</label>
+    <textarea class="word-input" id="sprintWords" placeholder="${isVerbSprint ? 'Запиши то, что вспомнилось…' : 'Запиши слова по теме…'}"></textarea>
     <div class="word-count" id="wordCount">0 разных слов</div>
     <div class="button-stack">
-      <button class="primary-button" id="saveSprint" type="button" disabled><span>Сохранить результат</span><span aria-hidden="true">→</span></button>
+      <button class="primary-button" id="saveSprint" type="button" disabled><span>${examples ? 'Сохранить и посмотреть примеры' : 'Сохранить результат'}</span><span aria-hidden="true">→</span></button>
     </div>
   `;
   const input = document.querySelector('#sprintWords');
@@ -1084,11 +1129,43 @@ function renderSprintInput(card, step) {
     save.disabled = words.length === 0;
   });
   save.addEventListener('click', () => {
-    sessionFor().sprintWords = parseWords(input.value);
+    const words = parseWords(input.value);
+    const session = sessionFor();
+    session.sprintWords = words;
+    session.sprintReviewStepId = examples ? step.id : null;
     saveState();
-    nextStep();
+    if (examples) renderSprintReview(card, step, words);
+    else nextStep();
   });
   input.focus();
+}
+
+function examplesForSprint(step) {
+  if (step.id === 'sprint') return sprintExamplesByProfile[state.profile] || sprintExamplesByProfile.conversation;
+  if (step.id === 'd2-sprint') return dayTwoSprintExamples;
+  return null;
+}
+
+function renderSprintReview(card, step, words) {
+  const examples = examplesForSprint(step);
+  card.innerHTML = `
+    <div class="stage-tag">После твоей попытки</div>
+    <h2>Сравни с примерами</h2>
+    <p>Для «сделать» нет одной замены: точный глагол зависит от действия.</p>
+    <div class="learning-card"><strong>Твои слова · ${words.length}</strong><span class="sprint-review-words">${escapeHtml(words.join(', '))}</span></div>
+    <ul class="sprint-examples">
+      ${examples.map(([before, after]) => `<li><span>${escapeHtml(before)}</span><strong>→ ${escapeHtml(after)}</strong></li>`).join('')}
+    </ul>
+    <p>Это не полный список и не проверка: приложение пока не оценивает смысл слов. Выбери одно новое сочетание и произнеси с ним фразу вслух.</p>
+    <div class="button-stack">
+      <button class="primary-button" id="continueAfterSprint" type="button"><span>Продолжить</span><span aria-hidden="true">→</span></button>
+    </div>
+  `;
+  document.querySelector('#continueAfterSprint').addEventListener('click', () => {
+    sessionFor().sprintReviewStepId = null;
+    nextStep();
+  });
+  focusMain();
 }
 
 function parseWords(value) {
@@ -1166,7 +1243,7 @@ function finishSession() {
       : 'Ты дошла до самооценки. В следующий раз попробуй добавить голосовую запись, чтобы услышать свою речь.';
   const secondSummaryCard = day.id === 7 && session.practiceFormat === 1
     ? `<div class="summary-card"><strong>${session.rehearsalFocus ? '1' : '0'}</strong><span>выбранный фокус</span></div>`
-    : `<div class="summary-card"><strong>${session.sprintWords.length}</strong><span>слов в спринте</span></div>`;
+    : `<div class="summary-card"><strong>${session.sprintWords.length}</strong><span>слов записано в спринте</span></div>`;
   session.completedAt = new Date().toISOString();
   saveState();
   document.querySelector('#skipStep').hidden = true;
