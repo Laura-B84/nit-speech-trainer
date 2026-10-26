@@ -22,10 +22,10 @@ const rehearsalFocusOptions = [
 ];
 
 const rehearsalSuggestions = {
-  conversation: 'Расскажи о ситуации, когда ты изменила своё решение, и объясни почему.',
+  conversation: 'Расскажи о ситуации, когда пришлось изменить своё решение, и объясни почему.',
   words: 'Объясни простыми словами навык, который недавно тебе пригодился.',
   speaker: 'Объясни, чему ты хочешь научить людей и какой результат они смогут получить.',
-  work: 'Расскажи о рабочем решении: какая была задача, что ты сделала и что получилось.',
+  work: 'Расскажи о рабочем решении: какая была задача, что удалось сделать и что получилось.',
   creator: 'Расскажи идею будущего видео или публикации и объясни, чем она полезна аудитории.',
 };
 
@@ -115,7 +115,7 @@ const goalProfiles = {
     label: 'Точные слова',
     baselineTitle: 'Расскажи о полезном навыке',
     baselinePrompt: 'Какой навык недавно появился у тебя и где он пригодился?',
-    threadPrompt: 'Как ты осваивала этот навык и что изменилось?',
+    threadPrompt: 'Как проходило освоение этого навыка и что изменилось?',
     anchors: ['навык', 'трудность', 'действие', 'результат'],
     shortenPrompt: 'Передай эту историю тремя точными предложениями.',
     shortenAnchors: ['1 · Раньше…', '2 · Затем…', '3 · Теперь…'],
@@ -353,19 +353,19 @@ function renderWeekMotivation(completedDays) {
     .sort((first, second) => Date.parse(state.sessions[String(second.id)].completedAt) - Date.parse(state.sessions[String(first.id)].completedAt))[0];
 
   if (activeDay) {
-    title.textContent = 'Ты уже начала';
-    message.textContent = `День ${activeDay.id} сохранён. Можно продолжить с того места, где ты остановилась.`;
+    title.textContent = 'Практика уже началась';
+    message.textContent = `День ${activeDay.id} сохранён. Можно продолжить с того же места.`;
     next.textContent = `Следующий шаг: открой «${activeDay.title}».`;
   } else if (completedDays === days.length) {
     title.textContent = 'Первая неделя пройдена';
-    message.textContent = 'Ты завершила все семь занятий. Теперь можно выбрать день, к которому хочется вернуться.';
+    message.textContent = 'Все семь занятий завершены. Теперь можно выбрать день, к которому хочется вернуться.';
     next.textContent = 'При повторе тебя ждут другой текст и разогрев.';
   } else if (latestDay) {
     const session = state.sessions[String(latestDay.id)];
     const isToday = new Date(session.completedAt).toDateString() === new Date().toDateString();
-    title.textContent = isToday ? 'Сегодня ты позанималась' : 'Ты уже начала практику';
+    title.textContent = isToday ? 'Сегодняшняя практика завершена' : 'Практика уже началась';
     message.textContent = `День ${latestDay.id} «${latestDay.title}» завершён. У тебя готово ${completedDays} из ${days.length} занятий.`;
-    next.textContent = `Когда будешь готова, открой День ${nextDay.id} «${nextDay.title}».`;
+    next.textContent = `Следующий шаг — День ${nextDay.id} «${nextDay.title}».`;
   } else {
     title.textContent = 'Начни с одного занятия';
     message.textContent = 'Несколько минут практики — уже конкретный шаг. Говори так, как получается сейчас.';
@@ -1236,18 +1236,18 @@ function finishSession() {
   const latestRecordedStep = spokenSteps[spokenSteps.length - 1] || recordedSteps[recordedSteps.length - 1];
   const completionText = day.id === 7 && session.practiceFormat === 1
     ? rehearsalRecordings >= 2
-      ? 'Ты выбрала материал и записала две версии одной речи. Записи сохранены на этом устройстве.'
-      : 'Ты прошла сценарий репетиции и отметила, как далась речь. Если запись получилась, она доступна на этом устройстве.'
+      ? 'Две версии одной речи записаны. Записи сохранены на этом устройстве.'
+      : 'Репетиция завершена, ощущения от речи отмечены. Если запись получилась, она доступна на этом устройстве.'
     : attemptRecordings.length
-      ? `Ты завершила занятие и сохранила ${attemptRecordings.length} ${recordingForm(attemptRecordings.length)}. Хорошая работа!`
-      : 'Ты завершила занятие и отметила свои ощущения. Это отправная точка для следующей попытки.';
+      ? `Занятие завершено. Сохранено ${attemptRecordings.length} ${recordingForm(attemptRecordings.length)}. Хорошая работа!`
+      : 'Занятие завершено, ощущения отмечены. Это отправная точка для следующей попытки.';
   const mainResult = day.id === 7 && session.practiceFormat === 1
     ? rehearsalRecordings >= 2
-      ? `Ты повторила речь с конкретной задачей: ${focus?.label.toLowerCase() || 'сделать следующую попытку яснее'}. Это настоящая практика.`
-      : `Ты выбрала один фокус для дальнейшей тренировки: ${focus?.label.toLowerCase() || 'говорить яснее'}.`
+      ? `Речь повторена с конкретной задачей: ${focus?.label.toLowerCase() || 'сделать следующую попытку яснее'}. Это настоящая практика.`
+      : `Выбран один фокус для дальнейшей тренировки: ${focus?.label.toLowerCase() || 'говорить яснее'}.`
     : latestRecordedStep
-      ? `Ты сделала запись в упражнении «${latestRecordedStep.name}». К этой попытке можно вернуться и заметить, что уже получается.`
-      : 'Ты дошла до самооценки. В следующий раз попробуй добавить голосовую запись, чтобы услышать свою речь.';
+      ? `Есть запись упражнения «${latestRecordedStep.name}». К этой попытке можно вернуться и заметить, что уже получается.`
+      : 'Самооценка готова. В следующий раз попробуй добавить голосовую запись, чтобы услышать свою речь.';
   const secondSummaryCard = day.id === 7 && session.practiceFormat === 1
     ? `<div class="summary-card"><strong>${session.rehearsalFocus ? '1' : '0'}</strong><span>выбранный фокус</span></div>`
     : `<div class="summary-card"><strong>${session.sprintWords.length}</strong><span>слов записано в спринте</span></div>`;
